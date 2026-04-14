@@ -1,0 +1,270 @@
+import { useEffect, useMemo, useState } from "react";
+import { Search, Bell, ChevronDown, Eye, AlertCircle } from "lucide-react";
+import ReviewApplications from "./ReviewApplications";
+import { fetchApplicationsBySources } from "../../lib/requestData";
+import { useAuth } from "../../context/AuthContext";
+
+function StatusBadge({ status }) {
+  return (
+    <span
+      className="px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-fit"
+      style={{ backgroundColor: "#FEF3C7", color: "#D97706" }}
+    >
+      <AlertCircle size={12} />
+      {status}
+    </span>
+  );
+}
+
+export default function ActionRequired() {
+  const { roleConfig } = useAuth();
+  const [applications, setApplications] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [activeTab, setActiveTab] = useState("All");
+  const [showReview, setShowReview] = useState(false);
+  const [selectedApplication, setSelectedApplication] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const sourceTables = useMemo(
+    () => roleConfig?.requestSources || [],
+    [roleConfig]
+  );
+
+  const tabs = useMemo(
+    () => ["All", ...sourceTables.map((source) => source.category)],
+    [sourceTables]
+  );
+
+  const theme = roleConfig?.theme || {
+    primary: "#008B88",
+    secondary: "#06C1EC",
+    tertiary: "#33BFB8",
+    ring: "#14B8A6",
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadApplications = async () => {
+      setIsLoading(true);
+      setLoadError("");
+
+      try {
+        const merged = await fetchApplicationsBySources(sourceTables);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setApplications(
+          merged.filter((row) => row.status === "Action Required")
+        );
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setLoadError(error?.message || "Failed to load applications.");
+        setApplications([]);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadApplications();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [reloadKey, sourceTables]);
+
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+
+  const filtered = applications
+    .filter((app) => activeTab === "All" || app.category === activeTab)
+    .filter((app) => {
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      return (
+        app.id.toLowerCase().includes(normalizedSearch) ||
+        app.name.toLowerCase().includes(normalizedSearch) ||
+        app.category.toLowerCase().includes(normalizedSearch) ||
+        app.status.toLowerCase().includes(normalizedSearch)
+      );
+    });
+
+  const handleReviewClick = (application) => {
+    setSelectedApplication(application);
+    setShowReview(true);
+  };
+
+  const handleBackToActionRequired = () => {
+    setShowReview(false);
+    setSelectedApplication(null);
+    setSearchTerm("");
+    setActiveTab("All");
+    setReloadKey((previous) => previous + 1);
+  };
+
+  if (showReview && selectedApplication) {
+    return (
+      <ReviewApplications
+        onBack={handleBackToActionRequired}
+        application={selectedApplication}
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-screen">
+      <div className="flex items-center justify-between mb-6 gap-4">
+        <div className="relative w-full max-w-lg">
+          <Search
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+            size={17}
+          />
+          <input
+            type="text"
+            placeholder="Search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white text-sm text-gray-500 outline-none shadow-md border border-gray-100 focus:ring-2 transition-all duration-200 placeholder-gray-400"
+          />
+        </div>
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white shadow-md border border-gray-100 cursor-pointer hover:shadow-lg transition-all duration-200">
+          <Bell size={18} className="text-gray-400" />
+          <ChevronDown size={14} className="text-gray-400" />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <h1
+          className="text-2xl mb-5"
+          style={{
+            fontFamily: "'Instrument Sans', sans-serif",
+            fontWeight: 500,
+          }}
+        >
+          <span className="text-gray-800">All </span>
+          <span
+            style={{
+              background: `linear-gradient(to right, ${theme.primary}, ${theme.secondary})`,
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              fontFamily: "'Instrument Sans', sans-serif",
+              fontWeight: 500,
+            }}
+          >
+            Action Required
+          </span>
+          <span className="text-gray-800"> Requests</span>
+        </h1>
+
+        <div className="flex gap-3 mb-5 flex-wrap">
+          <div
+            className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm min-w-[160px]"
+            style={{ backgroundColor: "#FFFBEB" }}
+          >
+            <span
+              className="w-3 h-3 rounded-full shrink-0"
+              style={{ backgroundColor: theme.tertiary || theme.secondary }}
+            />
+            <div>
+              <p className="text-[10px] text-gray-500 font-medium">Total Action Required</p>
+              <p className="text-lg font-bold text-gray-800">{applications.length}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-6 border-b border-gray-200 mb-4">
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className="pb-2 text-sm font-medium transition-all duration-200 border-b-2 -mb-px"
+              style={{
+                borderColor: activeTab === tab ? theme.primary : "transparent",
+                color: activeTab === tab ? "#1F2937" : "#9CA3AF",
+              }}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-gray-500 text-xs font-semibold">
+              <th className="pb-3 pr-4">Application ID</th>
+              <th className="pb-3 pr-4">Name</th>
+              <th className="pb-3 pr-4">Category</th>
+              <th className="pb-3 pr-4">Date</th>
+              <th className="pb-3 pr-4">Status</th>
+              <th className="pb-3">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading && (
+              <tr>
+                <td colSpan="6" className="py-10 text-center text-gray-400">
+                  Loading applications...
+                </td>
+              </tr>
+            )}
+
+            {!isLoading && loadError && (
+              <tr>
+                <td colSpan="6" className="py-10 text-center text-red-500">
+                  {loadError}
+                </td>
+              </tr>
+            )}
+
+            {!isLoading && !loadError && filtered.length === 0 && (
+              <tr>
+                <td colSpan="6" className="py-10 text-center text-gray-400">
+                  No action-required requests found.
+                </td>
+              </tr>
+            )}
+
+            {!isLoading &&
+              !loadError &&
+              filtered.map((row, index) => (
+                <tr
+                  key={row.key}
+                  className={`text-xs ${
+                    index % 2 === 0 ? "bg-gray-50" : "bg-white"
+                  }`}
+                >
+                  <td className="py-2.5 pr-4 font-semibold text-gray-700 pl-2">{row.id}</td>
+                  <td className="py-2.5 pr-4 text-gray-600">{row.name}</td>
+                  <td className="py-2.5 pr-4 text-gray-600">{row.category}</td>
+                  <td className="py-2.5 pr-4 text-gray-500">{row.date}</td>
+                  <td className="py-2.5 pr-4">
+                    <StatusBadge status={row.status} />
+                  </td>
+                  <td className="py-2.5">
+                    <button
+                      onClick={() => handleReviewClick(row)}
+                      className="flex items-center gap-1 font-semibold hover:underline text-xs"
+                      style={{ color: theme.secondary }}
+                    >
+                      <Eye size={13} />
+                      Review Application
+                    </button>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
