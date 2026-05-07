@@ -99,8 +99,11 @@ function FinalApprovalDisbursement({
   documents = [],
   onBack,
   onApproved,
+  onViewDocuments,
   asOverlay = false,
+  closeOnBackdropClick = false,
   readOnly = false,
+  showViewDocumentsButton = false,
   isApproving = false,
   errorMessage = "",
 }) {
@@ -164,7 +167,7 @@ function FinalApprovalDisbursement({
           : "min-h-screen bg-[#ECECEC] p-3 md:p-5"
       }
       style={{ fontFamily: "'Instrument Sans', sans-serif" }}
-      onClick={asOverlay ? onBack : undefined}
+      onClick={asOverlay && closeOnBackdropClick ? onBack : undefined}
     >
       <div
         className={
@@ -180,33 +183,41 @@ function FinalApprovalDisbursement({
               <ChevronLeft className="w-8 h-8 md:w-11 md:h-11" />
             </button>
             <h1 className="text-3xl md:text-[44px] leading-none font-semibold">
-              <span className="text-teal-600">Final Approval &amp; </span>
-              <span className="text-cyan-500">Disbursement</span>
+              <span className="text-teal-600">Approve Application </span>
+              <span className="text-cyan-500">Files?</span>
             </h1>
           </div>
 
           <p className="mt-5 text-xs md:text-lg font-semibold">Date Applied: {dateApplied}</p>
 
-          <div className="mt-8 md:mt-10 flex items-center justify-between gap-2 overflow-x-auto pb-2">
-            {steps.map((step, index) => (
-              <div key={step} className="flex items-center min-w-max">
-                <div className="flex flex-col items-center">
-                  <div
-                    className={`w-9 h-9 md:w-12 md:h-12 rounded-full flex items-center justify-center ${
-                      isStepComplete(index) ? "bg-lime-500" : "bg-[#BFBFBF]"
-                    }`}
-                  >
-                    <Check className="text-white" size={16} />
+          <div className="mt-8 md:mt-10 overflow-x-auto pb-2">
+            <div className="min-w-[760px] w-full flex items-start">
+              {steps.map((step, index) => (
+                <div
+                  key={step}
+                  className={`flex items-start ${
+                    index === steps.length - 1 ? "w-[148px]" : "flex-1 min-w-[148px]"
+                  }`}
+                >
+                  <div className="w-[148px] flex flex-col items-center text-center">
+                    <div
+                      className={`w-9 h-9 md:w-12 md:h-12 rounded-full flex items-center justify-center shadow-sm ${
+                        isStepComplete(index) ? "bg-lime-500" : "bg-[#BFBFBF]"
+                      }`}
+                    >
+                      <Check className="text-white" size={16} />
+                    </div>
+                    <span className="mt-3 text-[11px] md:text-[14px] leading-tight text-[#8A8A8A] px-2">
+                      {step}
+                    </span>
                   </div>
-                  <span className="mt-3 text-[11px] md:text-[16px] text-[#A7A7A7] whitespace-nowrap">
-                    {step}
-                  </span>
+
+                  {index !== steps.length - 1 && (
+                    <div className="flex-1 h-1 rounded-full bg-[#D9D9D9] mt-4 md:mt-5 mx-2" />
+                  )}
                 </div>
-                {index !== steps.length - 1 && (
-                  <div className="w-10 md:w-28 h-1 bg-[#D9D9D9] mx-2 md:mx-4" />
-                )}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           <div className="mt-10 md:mt-14 grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12">
@@ -261,22 +272,28 @@ function FinalApprovalDisbursement({
             </div>
           </div>
 
-          {!readOnly && (
-            <>
-              {errorMessage && (
-                <p className="mt-8 text-sm text-red-600 text-right">{errorMessage}</p>
-              )}
+          {errorMessage && !readOnly && (
+            <p className="mt-8 text-sm text-red-600 text-right">{errorMessage}</p>
+          )}
 
-              <div className="mt-6 md:mt-8 flex justify-end">
-                <button
-                  onClick={onApproved}
-                  disabled={isApproving}
-                  className="px-9 md:px-12 py-2.5 md:py-3 bg-lime-500 text-white rounded-full text-base md:text-lg font-semibold hover:bg-lime-600 transition shadow-[0_2px_3px_rgba(0,0,0,0.16)] disabled:opacity-60"
-                >
-                  {isApproving ? "Approving..." : "Approve"}
-                </button>
-              </div>
-            </>
+          {(showViewDocumentsButton || !readOnly) && (
+            <div className="mt-6 md:mt-8 flex justify-end">
+              <button
+                onClick={readOnly ? onViewDocuments : onApproved}
+                disabled={!readOnly && isApproving}
+                className={`px-9 md:px-12 py-2.5 md:py-3 rounded-full text-base md:text-lg font-semibold transition shadow-[0_2px_3px_rgba(0,0,0,0.16)] ${
+                  readOnly
+                    ? "bg-cyan-500 text-white hover:bg-cyan-600"
+                    : "bg-lime-500 text-white hover:bg-lime-600 disabled:opacity-60"
+                }`}
+              >
+                {readOnly
+                  ? "View Documents"
+                  : isApproving
+                    ? "Approving..."
+                    : "Approve"}
+              </button>
+            </div>
           )}
         </div>
       </div>

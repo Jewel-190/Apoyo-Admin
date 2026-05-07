@@ -40,19 +40,19 @@ function sortDocumentsForSummary(documents) {
   return documents
     .map((doc, index) => ({
       ...doc,
-      __index: index,
-      __isOptionalAttachment:
+      _index: index,
+      _isOptionalAttachment:
         doc?.fieldKey === "attachment_file" ||
         /attachments?\s*\(optional\)/i.test(String(doc?.label || doc?.name || "")),
     }))
     .sort((a, b) => {
-      if (a.__isOptionalAttachment !== b.__isOptionalAttachment) {
-        return a.__isOptionalAttachment ? 1 : -1;
+      if (a._isOptionalAttachment !== b._isOptionalAttachment) {
+        return a._isOptionalAttachment ? 1 : -1;
       }
 
-      return a.__index - b.__index;
+      return a._index - b._index;
     })
-    .map(({ __index, __isOptionalAttachment, ...doc }) => doc);
+    .map(({ _index, _isOptionalAttachment, ...doc }) => doc);
 }
 
 function FinalizeDocs({

@@ -16,7 +16,7 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
+**/.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
@@ -26,3 +26,21 @@ dist-ssr
 # Local temporary migration artifacts
 .temp-storage-migration/
 .temp-storage-migration-test/
+
+# Supabase CLI scratch / local-only files
+supabase/.temp/
+supabase/tmp_*
+supabase/seed.local.sql
+
+# Supabase local dev (usually contains secrets)
+supabase/.env
+supabase/.env.*
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Cursor/VSCode/OS junk
+.cursor/
+Thumbs.db

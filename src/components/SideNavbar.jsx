@@ -7,6 +7,7 @@ import {
   Bell,
   FileText,
   Activity,
+  Check,
   LogOut,
   ChevronDown,
 } from "lucide-react";
@@ -19,11 +20,16 @@ const subItems = [
   { label: "Resubmissions",   to: "/applications/resubmissions" },
 ];
 
+const forApprovalSubItems = [
+  { label: "Scheduling", to: "/scheduling" },
+  { label: "Case Study", to: "/case-study" },
+];
+
 const navItems = [
-  { label: "Archive",       to: "/archive",        icon: <Archive size={17} /> },
-  { label: "Notifications", to: "/notifications",  icon: <Bell size={17} /> },
-  { label: "Reports",       to: "/reports",        icon: <FileText size={17} /> },
-  { label: "Activity Logs", to: "/activity-logs",  icon: <Activity size={17} /> },
+  { label: "Archive", to: "/archive", icon: <Archive size={17} /> },
+  { label: "Notifications", to: "/notifications", icon: <Bell size={17} /> },
+  { label: "Reports", to: "/reports", icon: <FileText size={17} /> },
+  { label: "Activity Logs", to: "/activity-logs", icon: <Activity size={17} /> },
 ];
 
 export default function SideNavbar() {
@@ -40,11 +46,19 @@ export default function SideNavbar() {
   const isAppsRoute = location.pathname.startsWith("/applications");
   const [appsOpen, setAppsOpen] = useState(isAppsRoute);
 
+  const isForApprovalRoute =
+    location.pathname === "/scheduling" || location.pathname === "/case-study";
+  const [forApprovalOpen, setForApprovalOpen] = useState(isForApprovalRoute);
+
   return (
     <aside className="fixed top-0 left-0 h-full w-52 bg-white border-r border-gray-100 flex flex-col py-6 px-3 gap-1 z-50">
-      {/* Logo */}
-      <div className="flex items-center gap-2 px-2 mb-6">
-        <img src={apoyoLogo} alt="Apoyo" className="h-8 object-contain" />
+      {/* Logo — centered, constrained width for narrow sidebar */}
+      <div className="mb-6 flex w-full shrink-0 justify-center px-2">
+        <img
+          src={apoyoLogo}
+          alt="Apoyo"
+          className="block h-10 max-h-10 w-auto max-w-full object-contain object-center"
+        />
       </div>
 
       <div className="px-2 mb-3">
@@ -52,7 +66,9 @@ export default function SideNavbar() {
         <p className="text-xs font-semibold" style={{ color: primary }}>
           {roleTitle}
         </p>
-        <p className="text-[10px] text-gray-400">{adminRole || "medical_admin"}</p>
+        {adminRole ? (
+          <p className="text-[10px] text-gray-400 font-mono">{adminRole}</p>
+        ) : null}
       </div>
 
       {/* Dashboard */}
@@ -136,6 +152,80 @@ export default function SideNavbar() {
                     isActive
                       ? ""
                       : "bg-white border-gray-300"
+                  }`}
+                  style={
+                    isActive
+                      ? {
+                          backgroundColor: secondary,
+                          borderColor: secondary,
+                        }
+                      : undefined
+                  }
+                />
+                {item.label}
+              </NavLink>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* For Approval (collapsible) */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setForApprovalOpen((p) => !p)}
+          className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${isForApprovalRoute ? "text-white shadow-sm" : "text-gray-500 hover:bg-gray-100"}`}
+          style={
+            isForApprovalRoute
+              ? {
+                  backgroundImage: `linear-gradient(to right, ${primary}, ${secondary})`,
+                }
+              : undefined
+          }
+        >
+          <div className="flex items-center gap-3">
+            <Check size={17} strokeWidth={2.5} />
+            For Approval
+          </div>
+          <ChevronDown
+            size={14}
+            className={`transform transition-transform duration-200 ${
+              forApprovalOpen ? "rotate-180" : "rotate-0"
+            }`}
+          />
+        </button>
+
+        <div
+          className={`ml-3 mt-1 flex flex-col gap-1 relative overflow-hidden transition-all duration-300 ease-out ${
+            forApprovalOpen ? "max-h-60 opacity-100" : "max-h-0 opacity-0"
+          }`}
+          aria-hidden={!forApprovalOpen}
+        >
+          <div className="absolute left-[7px] top-0 bottom-0 w-px bg-gray-200" />
+
+          {forApprovalSubItems.map((item) => {
+            const isActive = location.pathname === item.to;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={`relative flex items-center gap-3 pl-6 pr-2 py-2 rounded-xl text-sm transition-all duration-200 ${
+                  isActive
+                    ? "font-semibold border bg-white"
+                    : "text-gray-400 hover:text-gray-600"
+                }`}
+                style={
+                  isActive
+                    ? {
+                        color: secondary,
+                        borderColor: secondary,
+                      }
+                    : undefined
+                }
+              >
+                <span
+                  className={`absolute left-[4px] w-2.5 h-2.5 rounded-full border-2 ${
+                    isActive ? "" : "bg-white border-gray-300"
                   }`}
                   style={
                     isActive

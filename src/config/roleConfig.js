@@ -1,3 +1,9 @@
+/**
+ * Admin roles and per-role request tables.
+ * Keep `REQUEST_SOURCES` table lists in sync with
+ * `supabase/functions/admin-dashboard-analytics/index.ts` → `TABLES_BY_ROLE`
+ * so dashboard analytics match what each role can access in the app.
+ */
 export const ADMIN_ROLES = {
   medical_admin: "medical_admin",
   financial_admin: "financial_admin",

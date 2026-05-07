@@ -1,6 +1,6 @@
 // src/applications/Reports.jsx
-import { useState } from "react";
-import { Search, Bell, ChevronDown, Download } from "lucide-react";
+import { Search, Download } from "lucide-react";
+import MiniNotifications from "../components/MiniNotifications";
 import { useAuth } from "../context/AuthContext";
 
 export default function Reports() {
@@ -26,10 +26,7 @@ export default function Reports() {
             className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white text-sm text-gray-500 outline-none shadow-md border border-gray-100 focus:ring-2 focus:ring-teal-300 transition-all duration-200 placeholder-gray-400"
           />
         </div>
-        <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white shadow-md border border-gray-100 cursor-pointer hover:shadow-lg transition-all duration-200">
-          <Bell size={18} className="text-gray-400" />
-          <ChevronDown size={14} className="text-gray-400" />
-        </div>
+        <MiniNotifications />
       </div>
 
       {/* Main Card */}

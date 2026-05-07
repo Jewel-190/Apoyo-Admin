@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Bell, ChevronDown, Eye } from "lucide-react";
+import { Search, Eye, RefreshCcw } from "lucide-react";
+import MiniNotifications from "../../components/MiniNotifications";
 import ReviewApplications from "./ReviewApplications";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchApplicationsBySources } from "../../lib/requestData";
@@ -11,6 +12,8 @@ const statusBadgeStyles = {
   "In Progress": { backgroundColor: "#E0F7FA", color: "#06C1EC" },
   "Action Required": { backgroundColor: "#FEF3C7", color: "#D97706" },
   Resubmitted: { backgroundColor: "#FEF9C3", color: "#CA8A04" },
+  "For Approval": { backgroundColor: "#CCFBF1", color: "#0F766E" },
+  Scheduled: { backgroundColor: "#E0F2FE", color: "#0369A1" },
   Approved: { backgroundColor: "#DCFCE7", color: "#15803D" },
 };
 
@@ -101,6 +104,8 @@ export default function Overview() {
               row.status !== "Draft" &&
               row.status !== "Action Required" &&
               row.status !== "Resubmitted" &&
+              row.status !== "For Approval" &&
+              row.status !== "Scheduled" &&
               row.status !== "Approved"
           )
           .sort((a, b) => {
@@ -153,6 +158,10 @@ export default function Overview() {
   const total = scopedApplications.length;
   const pending = scopedApplications.filter((a) => a.status === "Pending").length;
   const inProgress = scopedApplications.filter((a) => a.status === "In Progress").length;
+
+  const handleReload = () => {
+    setReloadKey((previous) => previous + 1);
+  };
 
   const handleReviewClick = async (application) => {
     if (!application?.requestId || !application?.sourceTable) {
@@ -239,34 +248,43 @@ export default function Overview() {
             className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white text-sm text-gray-500 outline-none shadow-md border border-gray-100 focus:ring-2 transition-all duration-200 placeholder-gray-400"
           />
         </div>
-        <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white shadow-md border border-gray-100 cursor-pointer hover:shadow-lg transition-all duration-200">
-          <Bell size={18} className="text-gray-400" />
-          <ChevronDown size={14} className="text-gray-400" />
-        </div>
+        <MiniNotifications />
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h1
-          className="text-2xl mb-5"
-          style={{
-            fontFamily: "'Instrument Sans', sans-serif",
-            fontWeight: 500,
-          }}
-        >
-          <span className="text-gray-800">All </span>
-          <span
+        <div className="flex items-start justify-between gap-3 mb-5">
+          <h1
+            className="text-2xl"
             style={{
-              background: `linear-gradient(to right, ${theme.primary}, ${theme.secondary})`,
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
               fontFamily: "'Instrument Sans', sans-serif",
               fontWeight: 500,
             }}
           >
-            {categoryTitle[activeTab]}
-          </span>
-          <span className="text-gray-800"> Applications</span>
-        </h1>
+            <span className="text-gray-800">All </span>
+            <span
+              style={{
+                background: `linear-gradient(to right, ${theme.primary}, ${theme.secondary})`,
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                fontFamily: "'Instrument Sans', sans-serif",
+                fontWeight: 500,
+              }}
+            >
+              {categoryTitle[activeTab]}
+            </span>
+            <span className="text-gray-800"> Applications</span>
+          </h1>
+
+          <button
+            onClick={handleReload}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+            style={{ boxShadow: `0 0 0 1px ${theme.primary}22 inset` }}
+            disabled={isLoading}
+          >
+            <RefreshCcw size={13} className={isLoading ? "animate-spin" : ""} />
+            {isLoading ? "Reloading..." : "Reload"}
+          </button>
+        </div>
 
         <div className="flex gap-3 mb-5 flex-wrap">
           <div

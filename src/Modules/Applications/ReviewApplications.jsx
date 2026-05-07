@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Minus,
   Plus,
+  FileText,
   X,
 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
@@ -15,6 +16,14 @@ import {
   FIELD_LABELS_BY_SOURCE_TABLE,
   FIELD_ORDER_BY_SOURCE_TABLE,
 } from "../../config/roleConfig";
+import { normalizeAttachmentResult } from "../../lib/requestData";
+import {
+  buildDisplayName,
+  formatDateLong,
+  getFirstValue,
+  resolveAdditionalInfoText,
+  resolveCoverageRows,
+} from "../../lib/requestReviewDisplay";
 
 const ATTACHMENT_BUCKET = "request-documents";
 
@@ -31,6 +40,8 @@ const STATUS_BADGE_STYLES = {
   Pending: "bg-purple-100 text-purple-600",
   "Action Required": "bg-orange-100 text-orange-700",
   Resubmitted: "bg-yellow-100 text-yellow-700",
+  "For Approval": "bg-teal-100 text-teal-800",
+  Scheduled: "bg-sky-100 text-sky-800",
   Approved: "bg-green-100 text-green-700",
 };
 
@@ -56,99 +67,38 @@ const GLOBAL_FIELD_LABELS = Object.assign(
   ...Object.values(FIELD_LABELS_BY_SOURCE_TABLE)
 );
 
-function formatDateLong(dateValue) {
-  if (!dateValue) {
-    return "N/A";
-  }
-
-  const parsed = new Date(dateValue);
-  if (Number.isNaN(parsed.getTime())) {
-    return "N/A";
-  }
-
-  return parsed.toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function getFirstValue(record, fields, fallback = "N/A") {
-  if (!record || typeof record !== "object") {
-    return fallback;
-  }
-
-  for (const field of fields) {
-    const value = record[field];
-    if (value !== null && value !== undefined && String(value).trim() !== "") {
-      return value;
-    }
-  }
-
-  return fallback;
-}
-
-function buildDisplayName(user, fallbackName = "Unknown Applicant") {
-  if (!user) {
-    return fallbackName;
-  }
-
-  const nameParts = [
-    user.first_name,
-    user.middle_name,
-    user.last_name,
-    user.suffix,
-  ].filter((part) => part && String(part).trim() !== "");
-
-  return nameParts.length > 0 ? nameParts.join(" ") : fallbackName;
-}
-
 function normalizeRequestStatus(status) {
   const key = String(status || "pending").trim().toLowerCase();
 
-  if (key === "in progress") {
+  if (key === "in progress" || key === "in_progress") {
     return "In Progress";
   }
-  if (key === "action required") {
+  if (key === "action required" || key === "action_required") {
     return "Action Required";
   }
   if (key === "resubmitted") {
     return "Resubmitted";
   }
+  if (key === "for approval" || key === "for_approval") {
+    return "For Approval";
+  }
+  if (key === "scheduled") {
+    return "Scheduled";
+  }
   if (key === "approved") {
     return "Approved";
+  }
+  if (key === "case study" || key === "case_study") {
+    return "Case Study";
+  }
+  if (key === "draft") {
+    return "Draft";
   }
   if (key === "pending") {
     return "Pending";
   }
 
   return "In Progress";
-}
-
-function normalizeAttachmentResult(value) {
-  const key = String(value || "pending").trim().toLowerCase();
-
-  if (["action required", "action_required", "requires_action"].includes(key)) {
-    return "Action Required";
-  }
-
-  if (key === "approved") {
-    return "Approved";
-  }
-
-  if (["verified", "complete", "done"].includes(key)) {
-    return "Verified";
-  }
-
-  if (key === "in progress" || key === "in_progress") {
-    return "In Progress";
-  }
-
-  if (["resubmitted", "resubmission", "resubmission_required"].includes(key)) {
-    return "Resubmitted";
-  }
-
-  return "Pending";
 }
 
 function hasActionRequiredAttachment(documents) {
@@ -385,150 +335,6 @@ function getAttachmentHierarchyRank(sourceTable, fieldKey, label) {
   return 500;
 }
 
-function resolveAdditionalInfoText(requestData) {
-  const value = getFirstValue(
-    requestData,
-    [
-      "additional_info",
-      "additional_information",
-      "other_info",
-      "other_information",
-      "remarks",
-      "notes",
-      "note",
-      "comment",
-      "comments",
-      "description",
-      "details",
-      "message",
-    ],
-    ""
-  );
-
-  const text = typeof value === "string" ? value.trim() : String(value || "").trim();
-  return text || "No additional info provided.";
-}
-
-function formatCoverageLabel(rawLabel) {
-  const normalized = String(rawLabel || "")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!normalized) {
-    return "Coverage";
-  }
-
-  return normalized
-    .split(" ")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function splitCoverageTextEntries(text) {
-  const lines = String(text || "")
-    .split(/\r?\n|;+|\|+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (
-    lines.length === 1 &&
-    lines[0].includes(":") &&
-    lines[0].includes(",")
-  ) {
-    return lines[0]
-      .split(/,(?=[^,]+:)/)
-      .map((part) => part.trim())
-      .filter(Boolean);
-  }
-
-  return lines;
-}
-
-function normalizeCoverageRows(value) {
-  if (value === null || value === undefined) {
-    return [];
-  }
-
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => normalizeCoverageRows(item));
-  }
-
-  if (typeof value === "object") {
-    return Object.entries(value)
-      .map(([key, rowValue]) => {
-        const normalizedValue =
-          rowValue === null || rowValue === undefined
-            ? ""
-            : typeof rowValue === "string"
-              ? rowValue.trim()
-              : String(rowValue).trim();
-
-        if (!normalizedValue) {
-          return null;
-        }
-
-        return {
-          label: formatCoverageLabel(key),
-          value: normalizedValue,
-        };
-      })
-      .filter(Boolean);
-  }
-
-  const text = String(value).trim();
-  if (!text) {
-    return [];
-  }
-
-  if (
-    (text.startsWith("{") && text.endsWith("}")) ||
-    (text.startsWith("[") && text.endsWith("]"))
-  ) {
-    try {
-      return normalizeCoverageRows(JSON.parse(text));
-    } catch {
-      // Fallback to plain text parsing.
-    }
-  }
-
-  return splitCoverageTextEntries(text)
-    .map((entry, index) => {
-      const separatorIndex = entry.indexOf(":");
-
-      if (separatorIndex === -1) {
-        return {
-          label: index === 0 ? "Coverage" : `Coverage ${index + 1}`,
-          value: entry,
-        };
-      }
-
-      const label = entry.slice(0, separatorIndex).trim();
-      const rowValue = entry.slice(separatorIndex + 1).trim();
-
-      if (!rowValue) {
-        return null;
-      }
-
-      return {
-        label: formatCoverageLabel(label),
-        value: rowValue,
-      };
-    })
-    .filter(Boolean);
-}
-
-function resolveCoverageRows(requestData) {
-  const rawCoverage = getFirstValue(
-    requestData,
-    ["coverage", "coverage_info", "coverage_details"],
-    ""
-  );
-
-  const rows = normalizeCoverageRows(rawCoverage);
-  return rows;
-}
-
 async function fetchRequestAttachments(sourceTable, requestId) {
   if (!sourceTable || !requestId) {
     return { data: [], error: null };
@@ -577,8 +383,8 @@ function mapAttachments(rows, sourceTable) {
       keyColumn: "uid",
       tableName: "request_attachments",
       fieldKey,
-      hierarchyRank: getAttachmentHierarchyRank(sourceTable, fieldKey, label),
-      orderIndex: index,
+      _hierarchyRank: getAttachmentHierarchyRank(sourceTable, fieldKey, label),
+      _orderIndex: index,
       objectPath,
       imageUrl: buildAttachmentImageUrl(objectPath),
       label,
@@ -597,13 +403,26 @@ function mapAttachments(rows, sourceTable) {
 
   return mapped
     .sort((a, b) => {
-      if (a.hierarchyRank !== b.hierarchyRank) {
-        return a.hierarchyRank - b.hierarchyRank;
+      if (a._hierarchyRank !== b._hierarchyRank) {
+        return a._hierarchyRank - b._hierarchyRank;
       }
 
-      return a.orderIndex - b.orderIndex;
+      return a._orderIndex - b._orderIndex;
     })
-    .map(({ hierarchyRank, orderIndex, ...doc }) => doc);
+    .map(({ _hierarchyRank, _orderIndex, ...doc }) => doc);
+}
+
+function isPdfAttachment(doc) {
+  const mimeType = String(
+    doc?.raw?.mime_type || doc?.raw?.content_type || ""
+  ).toLowerCase();
+
+  const lookup = [doc?.fileName, doc?.objectPath, doc?.imageUrl]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return mimeType.includes("pdf") || /\.pdf(\?|#|$)/.test(lookup);
 }
 
 function AttachmentImage({ doc, onImageClick }) {
@@ -617,8 +436,13 @@ function AttachmentImage({ doc, onImageClick }) {
     const loadToken = latestLoadTokenRef.current + 1;
     latestLoadTokenRef.current = loadToken;
 
+    // The reset-on-input-change pattern below is intentional: when the doc
+    // changes we synchronously clear the previous image so a stale src is not
+    // shown while the next one preloads. Behavior must be preserved.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setHasError(false);
     setDisplaySrc("");
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     if (!nextImageUrl) {
       setIsLoading(false);
@@ -681,6 +505,47 @@ function AttachmentImage({ doc, onImageClick }) {
       className="w-full h-full object-contain transition-all duration-200"
     />
   );
+}
+
+function AttachmentPreview({ doc, onImageClick }) {
+  if (!doc?.imageUrl) {
+    return (
+      <div className="text-sm text-gray-400 border border-dashed border-gray-300 rounded-lg px-6 py-8">
+        Preview is unavailable for this attachment.
+      </div>
+    );
+  }
+
+  if (isPdfAttachment(doc)) {
+    return (
+      <div className="w-full h-full p-4">
+        <button
+          onClick={onImageClick}
+          className="relative w-full h-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50 text-left group"
+          type="button"
+        >
+          <iframe
+            src={`${doc.imageUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+            title={doc.label || doc.fileName || "PDF Document"}
+            className="w-full h-full border-0 pointer-events-none"
+          />
+
+          <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition" />
+
+          <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white">
+            <FileText size={12} />
+            PDF Preview
+          </div>
+
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-gray-700 shadow-sm">
+            Click to open larger view
+          </div>
+        </button>
+      </div>
+    );
+  }
+
+  return <AttachmentImage doc={doc} onImageClick={onImageClick} />;
 }
 
 function uniqueValues(values) {
@@ -764,7 +629,12 @@ async function updateAttachmentReview(document, payload) {
   return response;
 }
 
-function ReviewApplications({ onBack, application, readOnly = false }) {
+function ReviewApplications({
+  onBack,
+  application,
+  readOnly = false,
+  openFinalApprovalOnLoad = false,
+}) {
   const navigate = useNavigate();
   const [documentsList, setDocumentsList] = useState([]);
   const [selectedReason, setSelectedReason] = useState("");
@@ -888,7 +758,7 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
     return () => {
       cancelled = true;
     };
-  }, [application]);
+  }, [application, readOnly]);
 
   useEffect(() => {
     if (!currentDoc) {
@@ -900,6 +770,15 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
     setSelectedReason(currentDoc.reasonForAction || "");
     setAdditionalReason(currentDoc.additionalReason || "");
   }, [currentDoc]);
+
+  useEffect(() => {
+    if (!openFinalApprovalOnLoad || !readOnly || isLoading) {
+      return;
+    }
+
+    setShowFinalApproval(true);
+    setShowFinalizeDocs(false);
+  }, [openFinalApprovalOnLoad, readOnly, isLoading]);
 
   const handleDocumentClick = (index) => {
     const clampedIndex = Math.max(0, Math.min(index, documentsList.length - 1));
@@ -1123,6 +1002,10 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
     setSaveError("");
   };
 
+  const handleViewDocumentsFromFinalApproval = () => {
+    setShowFinalApproval(false);
+  };
+
   const handleApproveRequest = async () => {
     if (readOnly || !application?.sourceTable || !application?.requestId || isApprovingRequest) {
       return;
@@ -1134,7 +1017,7 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
     try {
       const { error } = await supabase
         .from(application.sourceTable)
-        .update({ status: "approved" })
+        .update({ status: "for approval" })
         .eq("id", application.requestId);
 
       if (error) {
@@ -1143,11 +1026,11 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
 
       setRequestData((previous) => ({
         ...(previous || {}),
-        status: "approved",
+        status: "for approval",
       }));
 
       setShowFinalApproval(false);
-      navigate("/archive");
+      navigate("/scheduling");
     } catch (error) {
       setSaveError(error?.message || "Failed to approve request.");
     } finally {
@@ -1328,6 +1211,13 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
   );
   const email = getFirstValue(requesterData, ["email"], "N/A");
   const additionalInfoText = resolveAdditionalInfoText(requestData);
+  const financialRequestType = getFirstValue(
+    requestData,
+    ["financial_request_type"],
+    ""
+  );
+  const hasFinancialRequestType =
+    String(financialRequestType || "").trim() !== "";
   const hasCoverageField =
     requestData &&
     Object.prototype.hasOwnProperty.call(requestData, "coverage");
@@ -1336,40 +1226,46 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
   const currentDocResult = currentDoc?.result || "Pending";
   const currentDocResultStyle =
     ATTACHMENT_RESULT_STYLES[currentDocResult] || ATTACHMENT_RESULT_STYLES.Pending;
+  const expandedDocIsPdf = isPdfAttachment(expandedImageDoc);
 
   return (
-    <div
-      className="h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] md:h-[calc(100dvh-3rem)] md:max-h-[calc(100dvh-3rem)] w-full bg-white overflow-hidden flex flex-col"
-      style={{ fontFamily: "'Instrument Sans', sans-serif" }}
-    >
-      <div className="flex items-center justify-between px-8 py-4 border-b border-gray-200">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onBack}
-            className="p-2 text-gray-300 hover:text-gray-500 transition"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </button>
-          <h1 className="text-3xl font-semibold text-teal-600">Review Application</h1>
-        </div>
-        {!readOnly && (
-          <button
-            onClick={handleFinalizeDocs}
-            className="px-5 py-2 bg-green-100 text-green-700 rounded-full font-medium text-xs hover:bg-green-200 transition"
-          >
-            Finalize Documents
-          </button>
-        )}
-      </div>
+    <div className="relative w-full max-w-full">
+      <div
+        className="h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] md:h-[calc(100dvh-3rem)] md:max-h-[calc(100dvh-3rem)] w-full max-w-full flex min-h-0 flex-col box-border"
+        style={{ fontFamily: "'Instrument Sans', sans-serif" }}
+      >
+        <div
+          className="flex min-h-0 flex-1 w-full max-w-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-[0_4px_28px_-10px_rgba(0,139,136,0.22)] ring-1 ring-gray-900/[0.04]"
+          style={{ fontFamily: "'Instrument Sans', sans-serif" }}
+        >
+          <div className="flex items-center justify-between px-8 py-4 border-b border-gray-200 shrink-0">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={onBack}
+                className="p-2 text-gray-300 hover:text-gray-500 transition"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              <h1 className="text-3xl font-semibold text-teal-600">Review Application</h1>
+            </div>
+            {!readOnly && (
+              <button
+                onClick={handleFinalizeDocs}
+                className="px-5 py-2 bg-green-100 text-green-700 rounded-full font-medium text-xs hover:bg-green-200 transition"
+              >
+                Finalize Documents
+              </button>
+            )}
+          </div>
 
-      {isLoading && (
-        <div className="flex-1 min-h-0 flex items-center justify-center text-gray-500 text-sm">
-          Loading request details...
-        </div>
-      )}
+          {isLoading && (
+            <div className="flex-1 min-h-0 flex items-center justify-center text-gray-500 text-sm">
+              Loading request details...
+            </div>
+          )}
 
-      {!isLoading && (
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+          {!isLoading && (
+            <div className="flex flex-1 min-h-0 overflow-hidden">
           <div className="w-1/2 border-r border-gray-200 bg-white min-h-0 flex flex-col overflow-hidden">
             <div className="px-6 py-3 border-b border-gray-200 bg-white z-10 shrink-0">
               <h2 className="text-sm font-semibold text-gray-800">Details</h2>
@@ -1478,6 +1374,29 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
                       />
                     </div>
                   </div>
+                ) : hasFinancialRequestType ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-800 mb-1 leading-tight">
+                        Financial Request Type
+                      </div>
+                      <div className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-700 leading-5 break-words">
+                        {financialRequestType}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-800 mb-1 leading-tight">
+                        Additional Info
+                      </div>
+                      <textarea
+                        readOnly
+                        value={additionalInfoText}
+                        rows={3}
+                        className="w-full h-[3.25rem] rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-700 leading-5 whitespace-pre-wrap break-all resize-none overflow-y-auto"
+                      />
+                    </div>
+                  </div>
                 ) : (
                   <>
                     <div className="text-[11px] font-semibold text-gray-800 mb-1 leading-tight">
@@ -1493,7 +1412,7 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
                 )}
               </div>
 
-              <div className="mx-4 mb-3 bg-white border border-gray-300 rounded-lg px-[1.125rem] py-[1.125rem] shadow-sm">
+              <div className="mx-4 mb-2.5 bg-white border border-gray-300 rounded-lg px-5 py-4 shadow-sm">
                 <div className="flex items-baseline justify-between mb-2">
                   <h3 className="text-lg font-semibold text-gray-700 min-w-0 pr-3 break-words">
                     {currentDoc ? currentDoc.label : "No document available"}
@@ -1593,7 +1512,7 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
               {currentDoc && (
                 <>
                   <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
-                    <AttachmentImage
+                    <AttachmentPreview
                       doc={currentDoc}
                       onImageClick={(event) => {
                         event.stopPropagation();
@@ -1631,6 +1550,8 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
           </div>
         </div>
       )}
+        </div>
+      </div>
 
       {expandedImageDoc && (
         <div
@@ -1650,36 +1571,38 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
               </p>
             </div>
 
-            <div className="absolute top-20 left-4 z-10 flex items-center gap-1 bg-black/55 border border-white/20 rounded-lg px-2 py-1.5">
-              <button
-                onClick={() => adjustExpandedZoom(-1)}
-                className="p-1 text-white hover:bg-white/10 rounded"
-                aria-label="Zoom out"
-              >
-                <Minus className="w-4 h-4" />
-              </button>
+            {!expandedDocIsPdf && (
+              <div className="absolute top-20 left-4 z-10 flex items-center gap-1 bg-black/55 border border-white/20 rounded-lg px-2 py-1.5">
+                <button
+                  onClick={() => adjustExpandedZoom(-1)}
+                  className="p-1 text-white hover:bg-white/10 rounded"
+                  aria-label="Zoom out"
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
 
-              <select
-                value={expandedZoom}
-                onChange={(event) => handleExpandedZoomSelect(event.target.value)}
-                className="bg-transparent text-white text-sm border border-white/30 rounded px-2 py-1 outline-none"
-                aria-label="Select zoom level"
-              >
-                {[FIT_EXPANDED_ZOOM_LEVEL, ...EXPANDED_ZOOM_LEVELS.filter((level) => level !== FIT_EXPANDED_ZOOM_LEVEL)].map((level) => (
-                  <option key={level} value={level} className="text-black">
-                    {level === FIT_EXPANDED_ZOOM_LEVEL ? "Fit (100%)" : `${level}%`}
-                  </option>
-                ))}
-              </select>
+                <select
+                  value={expandedZoom}
+                  onChange={(event) => handleExpandedZoomSelect(event.target.value)}
+                  className="bg-transparent text-white text-sm border border-white/30 rounded px-2 py-1 outline-none"
+                  aria-label="Select zoom level"
+                >
+                  {[FIT_EXPANDED_ZOOM_LEVEL, ...EXPANDED_ZOOM_LEVELS.filter((level) => level !== FIT_EXPANDED_ZOOM_LEVEL)].map((level) => (
+                    <option key={level} value={level} className="text-black">
+                      {level === FIT_EXPANDED_ZOOM_LEVEL ? "Fit (100%)" : `${level}%`}
+                    </option>
+                  ))}
+                </select>
 
-              <button
-                onClick={() => adjustExpandedZoom(1)}
-                className="p-1 text-white hover:bg-white/10 rounded"
-                aria-label="Zoom in"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
+                <button
+                  onClick={() => adjustExpandedZoom(1)}
+                  className="p-1 text-white hover:bg-white/10 rounded"
+                  aria-label="Zoom in"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+            )}
 
             <button
               onClick={closeExpandedImage}
@@ -1690,7 +1613,15 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
             </button>
 
             <div className="w-full h-full overflow-auto relative">
-              {expandedZoom <= FIT_EXPANDED_ZOOM_LEVEL ? (
+              {expandedDocIsPdf ? (
+                <div className="absolute inset-0 px-4 pt-20 pb-4">
+                  <iframe
+                    src={`${expandedImageDoc.imageUrl}#toolbar=1&navpanes=0`}
+                    title={expandedImageDoc.label || expandedImageDoc.fileName || "PDF Document"}
+                    className="w-full h-full border border-white/20 rounded-lg bg-white"
+                  />
+                </div>
+              ) : expandedZoom <= FIT_EXPANDED_ZOOM_LEVEL ? (
                 <div className="absolute inset-0 px-6 py-6 flex items-center justify-center">
                   <img
                     src={expandedImageDoc.imageUrl}
@@ -1747,6 +1678,9 @@ function ReviewApplications({ onBack, application, readOnly = false }) {
           documents={documentsList}
           onBack={handleBackFromFinalApproval}
           onApproved={handleApproveRequest}
+          onViewDocuments={handleViewDocumentsFromFinalApproval}
+          showViewDocumentsButton={readOnly}
+          readOnly={readOnly}
           isApproving={isApprovingRequest}
           errorMessage={saveError}
           asOverlay
