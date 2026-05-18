@@ -1,0 +1,1209 @@
+/**
+ * Services.jsx — Content Management orchestrator for the assistance catalog.
+ *
+ * Manipulates the live Supabase catalog (assistance_categories →
+ * assistance_services → assistance_requirements → assistance_requirement_tips).
+ * Admin-only CMS fields (fonts, web hero/map/office title) live in
+ * `assistance_services.cms_metadata` (jsonb). Per-requirement sample docs live in
+ * `assistance_requirements.metadata` (jsonb).
+ *
+ * All write logic is intentionally inlined here so the entire CMS surface is
+ * contained in this file + AssistanceManagement.jsx (per product scope).
+ */
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  AddAssistanceForm,
+  AssistanceManagement,
+  CategoryEditDialog,
+  DEFAULT_ADDITIONAL_ATTACHMENT,
+  LARGE_MODAL_OVERLAY_CLASS,
+  LARGE_MODAL_PANEL_CLASS,
+  buildRadioSelectionPayload,
+  createEmptyRequirement,
+  defaultEditorFont,
+  isUploadableIconImageFile,
+  makeEmptyServiceForm,
+  normalizeRequestCodePrefix,
+  parseRadioSelectionForm,
+  parseWhoBulletsForm,
+  buildWhoBulletsPayload,
+  ServiceIconDisplay,
+  stripRichText,
+} from "./AssistanceManagement.jsx";
+
+import { supabase } from "../../../shared/lib/supabaseClient.js";
+
+const makeEmpty = () => makeEmptyServiceForm();
+
+const PlusIcon = () => (
+  <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+    <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+  </svg>
+);
+
+const PencilIcon = () => (
+  <svg className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <path d="M4 20h4l10-10-4-4L4 16v4z" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="m13.5 6.5 4 4" strokeLinecap="round" />
+  </svg>
+);
+
+const slugify = (text) =>
+  String(text || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-+|-+$)/g, "")
+    .slice(0, 64);
+
+const ADDITIONAL_ATTACHMENT_SLOT = DEFAULT_ADDITIONAL_ATTACHMENT.slotKey;
+
+function parseRequirementMetadata(metadata) {
+  const meta = metadata && typeof metadata === "object" ? metadata : {};
+  return {
+    sampleDocumentImage: meta.sampleDocumentImage || "",
+    sampleDocumentName: meta.sampleDocumentName || "",
+  };
+}
+
+function buildRequirementMetadata(req) {
+  const image = req?.sampleDocumentImage || "";
+  const name = req?.sampleDocumentName || "";
+  if (!image && !name) return {};
+  return { sampleDocumentImage: image, sampleDocumentName: name };
+}
+
+function buildAdditionalAttachment(svc, attachmentReq) {
+  const slotMap =
+    svc?.attachment_slot_map && typeof svc.attachment_slot_map === "object"
+      ? svc.attachment_slot_map
+      : {};
+  return {
+    title: attachmentReq?.title ?? DEFAULT_ADDITIONAL_ATTACHMENT.title,
+    slotKey: ADDITIONAL_ATTACHMENT_SLOT,
+    fileType: slotMap[ADDITIONAL_ATTACHMENT_SLOT] || DEFAULT_ADDITIONAL_ATTACHMENT.fileType,
+    _id: attachmentReq?._id ?? null,
+  };
+}
+
+const CATALOG_SELECT = `
+  id,
+  slug,
+  label,
+  headline,
+  sort_order,
+  active,
+  theme_json,
+  assistance_services!assistance_services_category_id_fkey (
+    id,
+    display_name,
+    request_code,
+    description_html,
+    about_html,
+    who_bullets,
+    mobile_image_url,
+    reminder_text,
+    web_intro_html,
+    cms_metadata,
+    radio_selection,
+    attachment_slot_map,
+    sort_order,
+    active,
+    assistance_requirements (
+      id,
+      slot_key,
+      title,
+      sort_order,
+      metadata,
+      assistance_requirement_tips (
+        id,
+        title,
+        description,
+        sort_order
+      )
+    )
+  )
+`;
+
+const sortBySortOrder = (rows) =>
+  [...(rows ?? [])].sort((a, b) => (a?.sort_order ?? 0) - (b?.sort_order ?? 0));
+
+/**
+ * Maps raw catalog rows into the local UI shape, keeping both the slug-based
+ * id (used by the UI) and the underlying UUIDs (used for DB writes).
+ */
+function mapCatalogRows(rows) {
+  if (!Array.isArray(rows) || !rows.length) return [];
+
+  return sortBySortOrder(rows).map((cat) => {
+    const services = sortBySortOrder(cat.assistance_services ?? [])
+      .filter((svc) => svc.active !== false)
+      .map((svc) => {
+        const allRequirements = sortBySortOrder(svc.assistance_requirements ?? []).map((req) => {
+          const sampleMeta = parseRequirementMetadata(req.metadata);
+          return {
+            title: req.title ?? "",
+            _id: req.id,
+            _slotKey: req.slot_key,
+            sampleDocumentImage: sampleMeta.sampleDocumentImage,
+            sampleDocumentName: sampleMeta.sampleDocumentName,
+            tips: sortBySortOrder(req.assistance_requirement_tips ?? []).map((tip) => ({
+              title: tip.title ?? "",
+              description: tip.description ?? "",
+            })),
+          };
+        });
+
+        const attachmentReq = allRequirements.find((r) => r._slotKey === ADDITIONAL_ATTACHMENT_SLOT);
+        const requirements = allRequirements.filter((r) => r._slotKey !== ADDITIONAL_ATTACHMENT_SLOT);
+
+        const meta = (svc.cms_metadata && typeof svc.cms_metadata === "object") ? svc.cms_metadata : {};
+
+        return {
+          id: svc.id,
+          name: svc.display_name ?? "",
+          requestCode: svc.request_code ?? "",
+          about: svc.about_html ?? "",
+          whoBullets: parseWhoBulletsForm(svc.who_bullets),
+          description: svc.description_html ?? "",
+          image: svc.mobile_image_url || "",
+          reminderText: svc.reminder_text ?? "",
+          webIntroText: svc.web_intro_html ?? "",
+          aboutFontFamily: meta.aboutFontFamily || defaultEditorFont,
+          descriptionFontFamily: meta.descriptionFontFamily || defaultEditorFont,
+          reminderFontFamily: meta.reminderFontFamily || defaultEditorFont,
+          webHeroImage: meta.webHeroImage || "",
+          webMapLink: meta.webMapLink || "",
+          webOfficeTitle: meta.webOfficeTitle || "",
+          requirements,
+          additionalAttachment: buildAdditionalAttachment(svc, attachmentReq),
+          radioSelection: parseRadioSelectionForm(svc.radio_selection),
+        };
+      });
+
+    return {
+      id: cat.slug,
+      categoryUuid: cat.id,
+      slug: cat.slug,
+      label: cat.label ?? "",
+      headline: cat.headline ?? "",
+      themeJson: cat.theme_json ?? null,
+      services,
+    };
+  });
+}
+
+/** Build the cms_metadata jsonb payload from the form. */
+function buildCmsMetadata(serviceForm) {
+  return {
+    aboutFontFamily: serviceForm.aboutFontFamily || defaultEditorFont,
+    descriptionFontFamily: serviceForm.descriptionFontFamily || defaultEditorFont,
+    reminderFontFamily: serviceForm.reminderFontFamily || defaultEditorFont,
+    webHeroImage: serviceForm.webHeroImage || "",
+    webMapLink: serviceForm.webMapLink || "",
+    webOfficeTitle: serviceForm.webOfficeTitle || "",
+  };
+}
+
+/** Map service form data → assistance_services row payload. */
+function buildServicePayload({ serviceForm, categoryId, sortOrder }) {
+  const displayName = serviceForm.name?.trim() || serviceForm.serviceName?.trim() || "";
+  return {
+    category_id: categoryId,
+    display_name: displayName,
+    about_html: serviceForm.about || "",
+    who_bullets: buildWhoBulletsPayload(serviceForm.whoBullets),
+    description_html: serviceForm.description || "",
+    mobile_image_url: serviceForm.image || serviceForm.serviceImage || null,
+    reminder_text: serviceForm.reminderText || "",
+    web_intro_html: serviceForm.webIntroText || "",
+    cms_metadata: buildCmsMetadata({
+      aboutFontFamily: serviceForm.aboutFontFamily,
+      descriptionFontFamily: serviceForm.descriptionFontFamily,
+      reminderFontFamily: serviceForm.reminderFontFamily,
+      webHeroImage: serviceForm.webHeroImage,
+      webMapLink: serviceForm.webMapLink,
+      webOfficeTitle: serviceForm.webOfficeTitle,
+    }),
+    sort_order: sortOrder,
+    active: true,
+    radio_selection: buildRadioSelectionPayload(serviceForm),
+    request_code: normalizeRequestCodePrefix(
+      serviceForm.requestCode ?? serviceForm.request_code
+    ) || null,
+  };
+}
+
+/**
+ * Persists the requirements + tips for a service while preserving the existing
+ * `slot_key` on rows that were loaded from DB (mobile attachments key off
+ * `slot_key`). New requirements get an auto-generated unique slot_key.
+ *
+ * Strategy:
+ *  - UPDATE existing requirements (matched by `_id`) → keeps slot_key stable.
+ *  - INSERT new requirements (no `_id`) with a fresh derived slot_key.
+ *  - DELETE requirements present in DB but missing from the form (cascade
+ *    removes their tips).
+ *  - For each surviving requirement, replace tips entirely (tips have no
+ *    cross-table FKs, so a wipe+reinsert is safe and simple).
+ */
+async function ensureAttachmentSlotMap(serviceId) {
+  const { data: svc, error } = await supabase
+    .from("assistance_services")
+    .select("attachment_slot_map")
+    .eq("id", serviceId)
+    .single();
+  if (error) throw error;
+
+  const { data: requirements, error: reqErr } = await supabase
+    .from("assistance_requirements")
+    .select("slot_key")
+    .eq("service_id", serviceId);
+  if (reqErr) throw reqErr;
+
+  const map =
+    svc?.attachment_slot_map && typeof svc.attachment_slot_map === "object"
+      ? { ...svc.attachment_slot_map }
+      : {};
+
+  let changed = false;
+  for (const row of requirements ?? []) {
+    const slotKey = String(row?.slot_key ?? "").trim();
+    if (!slotKey || map[slotKey]) continue;
+    map[slotKey] = slotKey;
+    changed = true;
+  }
+  if (!map[ADDITIONAL_ATTACHMENT_SLOT]) {
+    map[ADDITIONAL_ATTACHMENT_SLOT] = DEFAULT_ADDITIONAL_ATTACHMENT.fileType;
+    changed = true;
+  }
+  if (!changed) return;
+
+  const { error: updateErr } = await supabase
+    .from("assistance_services")
+    .update({ attachment_slot_map: map })
+    .eq("id", serviceId);
+  if (updateErr) throw updateErr;
+}
+
+async function clearRequirementTips(requirementId) {
+  if (!requirementId) return;
+  const { error } = await supabase
+    .from("assistance_requirement_tips")
+    .delete()
+    .eq("requirement_id", requirementId);
+  if (error) throw error;
+}
+
+/** System “Additional attachment” row — title only, never tips or sample metadata. */
+async function ensureAdditionalAttachmentRequirement(serviceId, additionalAttachment, sortOrder) {
+  const title =
+    additionalAttachment?.title?.trim() || DEFAULT_ADDITIONAL_ATTACHMENT.title;
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from("assistance_requirements")
+    .select("id")
+    .eq("service_id", serviceId)
+    .eq("slot_key", ADDITIONAL_ATTACHMENT_SLOT)
+    .maybeSingle();
+  if (fetchErr) throw fetchErr;
+
+  let requirementId = existing?.id ?? null;
+
+  if (requirementId) {
+    const { error } = await supabase
+      .from("assistance_requirements")
+      .update({
+        title,
+        sort_order: sortOrder,
+        required: true,
+        metadata: {},
+      })
+      .eq("id", requirementId);
+    if (error) throw error;
+  } else {
+    const { data: inserted, error } = await supabase
+      .from("assistance_requirements")
+      .insert({
+        service_id: serviceId,
+        slot_key: ADDITIONAL_ATTACHMENT_SLOT,
+        title,
+        sort_order: sortOrder,
+        required: true,
+        metadata: {},
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    requirementId = inserted.id;
+  }
+
+  await clearRequirementTips(requirementId);
+  return requirementId;
+}
+
+async function saveRequirementsForService(serviceId, requirements, additionalAttachment) {
+  const cleaned = (requirements || [])
+    .map((req) => ({
+      _id: req?._id ?? null,
+      _slotKey: req?._slotKey ?? null,
+      title: (req?.title ?? "").trim(),
+      sampleDocumentImage: req?.sampleDocumentImage || "",
+      sampleDocumentName: req?.sampleDocumentName || "",
+      tips: (req?.tips ?? [])
+        .map((tip) =>
+          typeof tip === "string"
+            ? { title: tip.trim(), description: "" }
+            : { title: (tip?.title ?? "").trim(), description: (tip?.description ?? "").trim() }
+        )
+        .filter((tip) => tip.title),
+    }))
+    .filter((req) => req.title);
+
+  // Existing DB rows for diffing.
+  const { data: existingRows, error: existingErr } = await supabase
+    .from("assistance_requirements")
+    .select("id, slot_key")
+    .eq("service_id", serviceId);
+  if (existingErr) throw existingErr;
+
+  const existingById = new Map((existingRows ?? []).map((r) => [r.id, r]));
+  const submittedIds = new Set(cleaned.map((r) => r._id).filter(Boolean));
+
+  // 1) Delete requirements removed from the form (never delete the system attachment slot).
+  const toDelete = (existingRows ?? [])
+    .filter(
+      (r) =>
+        !submittedIds.has(r.id) && r.slot_key !== ADDITIONAL_ATTACHMENT_SLOT
+    )
+    .map((r) => r.id);
+  if (toDelete.length) {
+    const { error } = await supabase
+      .from("assistance_requirements")
+      .delete()
+      .in("id", toDelete);
+    if (error) throw error;
+  }
+
+  // 2) Pre-compute slot_keys for new requirements while avoiding collision
+  //    with existing slot_keys we're keeping.
+  const reservedSlotKeys = new Set(
+    cleaned
+      .filter((r) => r._id && existingById.has(r._id))
+      .map((r) => r._slotKey)
+      .filter(Boolean)
+  );
+  const reserveSlotKey = (rawTitle, index) => {
+    let base = slugify(rawTitle) || `req-${index + 1}`;
+    if (!reservedSlotKeys.has(base)) {
+      reservedSlotKeys.add(base);
+      return base;
+    }
+    let n = 2;
+    while (reservedSlotKeys.has(`${base}-${n}`)) n += 1;
+    const next = `${base}-${n}`;
+    reservedSlotKeys.add(next);
+    return next;
+  };
+
+  // 3) UPDATE existing + INSERT new. Resolve each requirement's final uuid.
+  const resolvedIds = [];
+  for (let index = 0; index < cleaned.length; index += 1) {
+    const req = cleaned[index];
+    if (req._id && existingById.has(req._id)) {
+      const { error } = await supabase
+        .from("assistance_requirements")
+        .update({
+          title: req.title,
+          sort_order: index + 1,
+          metadata: buildRequirementMetadata(req),
+        })
+        .eq("id", req._id);
+      if (error) throw error;
+      resolvedIds.push(req._id);
+    } else {
+      const slotKey = reserveSlotKey(req.title, index);
+      const { data: inserted, error } = await supabase
+        .from("assistance_requirements")
+        .insert({
+          service_id: serviceId,
+          slot_key: slotKey,
+          title: req.title,
+          sort_order: index + 1,
+          required: true,
+          metadata: buildRequirementMetadata(req),
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+      resolvedIds.push(inserted.id);
+    }
+  }
+
+  // 4) Replace tips per requirement (no external FKs depend on tip ids).
+  for (let index = 0; index < cleaned.length; index += 1) {
+    const requirementId = resolvedIds[index];
+    const req = cleaned[index];
+    const { error: tipDelErr } = await supabase
+      .from("assistance_requirement_tips")
+      .delete()
+      .eq("requirement_id", requirementId);
+    if (tipDelErr) throw tipDelErr;
+
+    if (req.tips.length) {
+      const tipRows = req.tips.map((tip, tipIndex) => ({
+        requirement_id: requirementId,
+        title: tip.title,
+        description: tip.description,
+        sort_order: tipIndex + 1,
+      }));
+      const { error: tipInsErr } = await supabase
+        .from("assistance_requirement_tips")
+        .insert(tipRows);
+      if (tipInsErr) throw tipInsErr;
+    }
+  }
+
+  await ensureAttachmentSlotMap(serviceId);
+  await ensureAdditionalAttachmentRequirement(
+    serviceId,
+    additionalAttachment,
+    cleaned.length + 1
+  );
+}
+
+/**
+ * Local requirement normalizer that preserves `_id` and `_slotKey` (mobile
+ * attachment slots key off `slot_key`).
+ */
+function normalizeRequirementsPreserveMeta(requirements) {
+  const list = (requirements ?? []).map((req) => ({
+    _id: req?._id ?? null,
+    _slotKey: req?._slotKey ?? null,
+    title: req?.title ?? "",
+    sampleDocumentImage: req?.sampleDocumentImage ?? "",
+    sampleDocumentName: req?.sampleDocumentName ?? "",
+    tips:
+      (req?.tips ?? []).length > 0
+        ? req.tips.map((tip) =>
+            typeof tip === "string"
+              ? { title: tip, description: "" }
+              : { title: tip?.title ?? "", description: tip?.description ?? "" }
+          )
+        : [{ title: "", description: "" }],
+  }));
+  return list.length ? list : [{ title: "", tips: [{ title: "", description: "" }] }];
+}
+
+/** Generate a fresh, unique category slug from a human label. */
+async function generateUniqueCategorySlug(label) {
+  const base = slugify(label) || "category";
+
+  const { data: existing, error } = await supabase
+    .from("assistance_categories")
+    .select("slug")
+    .like("slug", `${base}%`);
+  if (error) throw error;
+
+  const taken = new Set((existing ?? []).map((r) => r.slug));
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base}-${n}`)) n += 1;
+  return `${base}-${n}`;
+}
+
+export function Services() {
+  const [assistances, setAssistances] = useState([]);
+  const [selectedAssistanceId, setSelectedAssistanceId] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const [isAddAssistanceOpen, setIsAddAssistanceOpen] = useState(false);
+  const [isAddServiceOpen, setIsAddServiceOpen] = useState(false);
+  const [editingServiceId, setEditingServiceId] = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null); // { uuid, slug, label, headline }
+  const [newService, setNewService] = useState(makeEmpty);
+  const [selectedServiceRequirementIndex, setSelectedServiceRequirementIndex] = useState(null);
+  const [selectedServiceTipIndex, setSelectedServiceTipIndex] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  const loadCatalog = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError("");
+    const { data, error } = await supabase
+      .from("assistance_categories")
+      .select(CATALOG_SELECT)
+      .eq("active", true)
+      .order("sort_order", { ascending: true });
+
+    if (error) {
+      console.error("[ContentManagement] catalog fetch failed", error);
+      setLoadError(error.message || "Failed to load catalog.");
+      setIsLoading(false);
+      return;
+    }
+
+    const mapped = mapCatalogRows(data);
+    setAssistances(mapped);
+    setSelectedAssistanceId((prev) =>
+      mapped.some((c) => c.id === prev) ? prev : mapped[0]?.id || ""
+    );
+    setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await loadCatalog();
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadCatalog]);
+
+  useEffect(() => {
+    if (!isAddServiceOpen) return undefined;
+    const html = document.documentElement;
+    const body = document.body;
+    const main = document.querySelector("main");
+    const prevHtml = html.style.overflow;
+    const prevBody = body.style.overflow;
+    const prevMain = main?.style.overflow ?? "";
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    if (main) main.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prevHtml;
+      body.style.overflow = prevBody;
+      if (main) main.style.overflow = prevMain;
+    };
+  }, [isAddServiceOpen]);
+
+  const selectedAssistance =
+    assistances.find((assistance) => assistance.id === selectedAssistanceId) ??
+    assistances[0] ??
+    null;
+
+  const updateNewService = useCallback(
+    (field, value) => setNewService((prev) => ({ ...prev, [field]: value })),
+    []
+  );
+
+  const handleImageUpload = (field, event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!isUploadableIconImageFile(file)) {
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setNewService((prev) => ({
+        ...prev,
+        [field]: String(reader.result),
+      }));
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  };
+
+  const handleRequirementSampleUpload = useCallback((index, event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setNewService((prev) => {
+        const next = [...prev.requirements];
+        next[index] = {
+          ...next[index],
+          sampleDocumentImage: String(reader.result),
+          sampleDocumentName: file.name,
+        };
+        return { ...prev, requirements: next };
+      });
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  }, []);
+
+  const handleRequirementSampleClear = useCallback((index) => {
+    setNewService((prev) => {
+      const next = [...prev.requirements];
+      next[index] = {
+        ...next[index],
+        sampleDocumentImage: "",
+        sampleDocumentName: "",
+      };
+      return { ...prev, requirements: next };
+    });
+  }, []);
+
+  const requirementHandlers = useMemo(
+    () => ({
+      onRequirementChange: (index, value) =>
+        setNewService((prev) => {
+          const next = [...prev.requirements];
+          next[index] = { ...next[index], title: value };
+          return { ...prev, requirements: next };
+        }),
+      onAddRequirement: () =>
+        setNewService((prev) => {
+          const nextRequirements = [...prev.requirements, createEmptyRequirement()];
+          setSelectedServiceRequirementIndex(nextRequirements.length - 1);
+          setSelectedServiceTipIndex(null);
+          return { ...prev, requirements: nextRequirements };
+        }),
+      onRemoveRequirement: (index) =>
+        setNewService((prev) => {
+          const next = prev.requirements.filter((_, idx) => idx !== index);
+          setSelectedServiceTipIndex(null);
+          return {
+            ...prev,
+            requirements: next.length ? next : [createEmptyRequirement()],
+          };
+        }),
+    }),
+    []
+  );
+
+  const tipHandlers = useMemo(
+    () => ({
+      onTipChange: (requirementIndex, tipIndex, field, value) =>
+        setNewService((prev) => {
+          const reqIndex = Math.min(Math.max(0, requirementIndex ?? 0), prev.requirements.length - 1);
+          const next = [...prev.requirements];
+          const tips = [...(next[reqIndex].tips ?? [{ title: "", description: "" }])];
+          const current = tips[tipIndex];
+          const normalized =
+            typeof current === "string"
+              ? { title: current, description: "" }
+              : current ?? { title: "", description: "" };
+          tips[tipIndex] = { ...normalized, [field]: value };
+          next[reqIndex] = { ...next[reqIndex], tips };
+          return { ...prev, requirements: next };
+        }),
+      onAddTip: (requirementIndex) =>
+        setNewService((prev) => {
+          const reqIndex = Math.min(Math.max(0, requirementIndex ?? 0), prev.requirements.length - 1);
+          const next = [...prev.requirements];
+          const tips = [
+            ...(next[reqIndex].tips ?? [{ title: "", description: "" }]),
+            { title: "", description: "" },
+          ];
+          next[reqIndex] = { ...next[reqIndex], tips };
+          return { ...prev, requirements: next };
+        }),
+      onRemoveTip: (requirementIndex, tipIndex) =>
+        setNewService((prev) => {
+          const reqIndex = Math.min(Math.max(0, requirementIndex ?? 0), prev.requirements.length - 1);
+          const next = [...prev.requirements];
+          const tips = (next[reqIndex].tips ?? [{ title: "", description: "" }]).filter(
+            (_, idx) => idx !== tipIndex
+          );
+          next[reqIndex] = { ...next[reqIndex], tips: tips.length ? tips : [{ title: "", description: "" }] };
+          return { ...prev, requirements: next };
+        }),
+    }),
+    []
+  );
+
+  const closeServiceModal = () => {
+    setIsAddServiceOpen(false);
+    setEditingServiceId(null);
+    setNewService(makeEmpty());
+    setSelectedServiceRequirementIndex(null);
+    setSelectedServiceTipIndex(null);
+    setSaveError("");
+  };
+
+  const openCreateServiceModal = () => {
+    if (!selectedAssistance) return;
+    setEditingServiceId(null);
+    setNewService(makeEmpty());
+    setSelectedServiceRequirementIndex(null);
+    setSelectedServiceTipIndex(null);
+    setSaveError("");
+    setIsAddServiceOpen(true);
+  };
+
+  const openEditServiceModal = (service) => {
+    setEditingServiceId(service.id);
+    setNewService({
+      serviceName: service.name ?? "",
+      requestCode: service.requestCode ?? "",
+      serviceImage: service.image ?? "",
+      about: service.about ?? "",
+      whoBullets: service.whoBullets ?? parseWhoBulletsForm(null),
+      description: service.description ?? "",
+      aboutFontFamily: service.aboutFontFamily ?? defaultEditorFont,
+      descriptionFontFamily: service.descriptionFontFamily ?? defaultEditorFont,
+      requirements: normalizeRequirementsPreserveMeta(service.requirements),
+      reminderText: service.reminderText ?? "",
+      reminderFontFamily: service.reminderFontFamily ?? defaultEditorFont,
+      additionalAttachment: service.additionalAttachment ?? { ...DEFAULT_ADDITIONAL_ATTACHMENT },
+      webHeroImage: service.webHeroImage ?? "",
+      webMapLink: service.webMapLink ?? "",
+      webIntroText: service.webIntroText ?? "",
+      webOfficeTitle: service.webOfficeTitle ?? "",
+      radioSelection: service.radioSelection ?? parseRadioSelectionForm(null),
+    });
+    setSelectedServiceRequirementIndex(null);
+    setSelectedServiceTipIndex(null);
+    setSaveError("");
+    setIsAddServiceOpen(true);
+  };
+
+  /** Persist a brand-new category + initial service (called from AssistanceManagement modal). */
+  const handleCreateAssistance = async (payload) => {
+    setSaveError("");
+    setIsSaving(true);
+    try {
+      const slug = await generateUniqueCategorySlug(payload.assistanceName);
+      const nextCategorySort =
+        (assistances[assistances.length - 1]?.services?.length ?? 0) + assistances.length + 1;
+
+      const { data: insertedCategory, error: catError } = await supabase
+        .from("assistance_categories")
+        .insert({
+          slug,
+          label: payload.assistanceName.trim(),
+          headline: payload.headline?.trim() || `${payload.assistanceName.trim()} Assistance`,
+          sort_order: nextCategorySort,
+          active: true,
+        })
+        .select("id, slug")
+        .single();
+      if (catError) throw catError;
+
+      const servicePayload = buildServicePayload({
+        serviceForm: payload.service,
+        categoryId: insertedCategory.id,
+        sortOrder: 1,
+      });
+
+      const displayName = payload.service?.name?.trim() || "";
+      const { data: insertedService, error: svcError } = await supabase
+        .from("assistance_services")
+        .insert({
+          ...servicePayload,
+          request_code_token: slugify(displayName) || null,
+          attachment_slot_map: { [ADDITIONAL_ATTACHMENT_SLOT]: DEFAULT_ADDITIONAL_ATTACHMENT.fileType },
+        })
+        .select("id")
+        .single();
+      if (svcError) throw svcError;
+
+      await saveRequirementsForService(
+        insertedService.id,
+        payload.requirements,
+        payload.additionalAttachment
+      );
+      await loadCatalog();
+      setSelectedAssistanceId(insertedCategory.slug);
+      return { ok: true };
+    } catch (err) {
+      console.error("[ContentManagement] create assistance failed", err);
+      setSaveError(err?.message || "Failed to save assistance.");
+      return { ok: false };
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  /** Persist updates to an existing category (label / headline). */
+  const handleUpdateCategory = async (categoryUuid, partial) => {
+    setSaveError("");
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from("assistance_categories")
+        .update({
+          label: partial.label?.trim(),
+          headline: partial.headline?.trim(),
+        })
+        .eq("id", categoryUuid);
+      if (error) throw error;
+      await loadCatalog();
+    } catch (err) {
+      console.error("[ContentManagement] update category failed", err);
+      setSaveError(err?.message || "Failed to update assistance category.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteCategory = async (categoryUuid) => {
+    setSaveError("");
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from("assistance_categories")
+        .update({ active: false })
+        .eq("id", categoryUuid);
+      if (error) throw error;
+      await loadCatalog();
+    } catch (err) {
+      console.error("[ContentManagement] delete category failed", err);
+      setSaveError(err?.message || "Failed to archive category.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveService = async () => {
+    if (!selectedAssistance) return;
+    const serviceName = (newService.serviceName || "").trim();
+    if (!serviceName) return;
+
+    setSaveError("");
+    setIsSaving(true);
+    try {
+      const categoryUuid = selectedAssistance.categoryUuid;
+      const isUpdate = Boolean(editingServiceId);
+      const sortOrder = isUpdate
+        ? (selectedAssistance.services.findIndex((s) => s.id === editingServiceId) + 1) || 1
+        : (selectedAssistance.services.length + 1);
+
+      const payload = buildServicePayload({
+        serviceForm: {
+          name: serviceName,
+          requestCode: newService.requestCode || "",
+          about: newService.about || "",
+          whoBullets: newService.whoBullets,
+          description: newService.description || "",
+          image: newService.serviceImage || null,
+          aboutFontFamily: newService.aboutFontFamily,
+          descriptionFontFamily: newService.descriptionFontFamily,
+          reminderText: newService.reminderText || "",
+          reminderFontFamily: newService.reminderFontFamily,
+          webHeroImage: newService.webHeroImage,
+          webMapLink: newService.webMapLink,
+          webIntroText: newService.webIntroText,
+          webOfficeTitle: newService.webOfficeTitle,
+          radioSelection: newService.radioSelection,
+        },
+        categoryId: categoryUuid,
+        sortOrder,
+      });
+
+      let serviceId = editingServiceId;
+      if (isUpdate) {
+        const { error } = await supabase
+          .from("assistance_services")
+          .update(payload)
+          .eq("id", serviceId);
+        if (error) throw error;
+      } else {
+        const { data: inserted, error } = await supabase
+          .from("assistance_services")
+          .insert({
+            ...payload,
+            request_code_token: slugify(serviceName) || null,
+            attachment_slot_map: { [ADDITIONAL_ATTACHMENT_SLOT]: DEFAULT_ADDITIONAL_ATTACHMENT.fileType },
+          })
+          .select("id")
+          .single();
+        if (error) throw error;
+        serviceId = inserted.id;
+      }
+
+      await saveRequirementsForService(
+        serviceId,
+        newService.requirements,
+        newService.additionalAttachment
+      );
+      await loadCatalog();
+      closeServiceModal();
+    } catch (err) {
+      console.error("[ContentManagement] save service failed", err);
+      setSaveError(err?.message || "Failed to save service.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteService = async (serviceId) => {
+    setSaveError("");
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from("assistance_services")
+        .update({ active: false })
+        .eq("id", serviceId);
+      if (error) throw error;
+      await loadCatalog();
+    } catch (err) {
+      console.error("[ContentManagement] delete service failed", err);
+      setSaveError(err?.message || "Failed to archive service.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const submitLabel = isSaving ? "Saving..." : editingServiceId ? "Update Service" : "Save Service";
+  const categoryLabel = selectedAssistance?.headline || selectedAssistance?.label || "";
+  const modalTitle = editingServiceId ? "Edit service" : "Add service";
+
+  const serviceModal =
+    isAddServiceOpen &&
+    createPortal(
+      <div
+        className={LARGE_MODAL_OVERLAY_CLASS}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="service-details-modal-title"
+        onClick={() => !isSaving && closeServiceModal()}
+      >
+        <div className={LARGE_MODAL_PANEL_CLASS} onClick={(e) => e.stopPropagation()}>
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-ocean-100 px-5 py-2.5">
+            <div>
+              <h3 id="service-details-modal-title" className="text-lg font-semibold text-ocean-950">
+                {modalTitle}
+              </h3>
+              <p className="mt-1 text-sm text-ocean-600">
+                {categoryLabel
+                  ? `Configure catalog content for ${categoryLabel}. Changes apply to the mobile app after save.`
+                  : "Configure service title, requirements, reminders, and previews."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={closeServiceModal}
+              disabled={isSaving}
+              className="inline-flex h-10 shrink-0 items-center self-center rounded-lg border border-ocean-200 bg-ocean-50 px-3 text-sm font-semibold text-ocean-700 transition hover:border-ocean-300 hover:bg-ocean-100 disabled:opacity-60"
+            >
+              Close
+            </button>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 pb-2 pt-3">
+            <AddAssistanceForm
+                layout="modal"
+                mode="service"
+                formData={newService}
+                selectedRequirementIndex={selectedServiceRequirementIndex}
+                selectedTipIndex={selectedServiceTipIndex}
+                onSelectRequirement={(index) => {
+                  setSelectedServiceRequirementIndex(index);
+                  setSelectedServiceTipIndex(null);
+                }}
+                onSelectTip={setSelectedServiceTipIndex}
+                onChange={updateNewService}
+                onImageUpload={handleImageUpload}
+                onRequirementSampleUpload={handleRequirementSampleUpload}
+                onRequirementSampleClear={handleRequirementSampleClear}
+                {...requirementHandlers}
+                {...tipHandlers}
+                previewCategoryTitle={categoryLabel}
+                previewCategorySlug={selectedAssistance?.slug ?? ""}
+                previewCategoryThemeJson={selectedAssistance?.themeJson ?? null}
+                onSubmit={handleSaveService}
+                onClose={closeServiceModal}
+                submitLabel={submitLabel}
+                statusMessage={saveError}
+                isSaving={isSaving}
+                saveConfirmMode={editingServiceId ? "update" : "create"}
+                archiveTarget={
+                  editingServiceId
+                    ? {
+                        entityName: newService.serviceName?.trim() || "",
+                        isProcessing: isSaving,
+                        onArchive: async () => {
+                          await handleDeleteService(editingServiceId);
+                          closeServiceModal();
+                        },
+                      }
+                    : null
+                }
+              />
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(10,70,111,0.7)]">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">Header</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight text-ocean-950">
+              List of Active Services
+            </h2>
+            <p className="mt-1 text-sm text-ocean-700">
+              Select an assistance category to view and manage services.
+            </p>
+            {isLoading ? (
+              <p className="mt-2 text-xs font-medium text-ocean-700">Loading catalog…</p>
+            ) : null}
+            {loadError ? (
+              <p className="mt-2 text-xs font-medium text-rose-600">{loadError}</p>
+            ) : null}
+            {!isLoading && !loadError ? (
+              <p className="mt-2 text-xs font-medium text-teal-700">
+                Live catalog · changes save to Database and propagate to the mobile app.
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setEditingCategory(null);
+              setIsAddAssistanceOpen(true);
+            }}
+            disabled={isSaving}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-ocean-200 bg-ocean-50 px-3 text-sm font-semibold text-ocean-800 transition hover:border-ocean-300 hover:bg-ocean-100 disabled:opacity-60"
+          >
+            <PlusIcon />
+            Add Assistance
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {assistances.map((assistance) => {
+            const isActive = selectedAssistance?.id === assistance.id;
+            return (
+              <div
+                key={assistance.id}
+                className={`group flex items-stretch gap-1 rounded-2xl border px-2 py-1 ${
+                  isActive
+                    ? "border-ocean-500 bg-ocean-500/95 text-white shadow-[0_10px_22px_-15px_rgba(19,136,199,0.9)]"
+                    : "border-ocean-200 bg-ocean-50 text-ocean-900 hover:border-ocean-300 hover:bg-white"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSelectedAssistanceId(assistance.id)}
+                  className="flex-1 px-3 py-3 text-left text-base font-semibold transition"
+                >
+                  {assistance.label}
+                </button>
+                <div className="flex flex-col items-center justify-center gap-1 pr-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCategory({
+                        uuid: assistance.categoryUuid,
+                        slug: assistance.slug,
+                        label: assistance.label,
+                        headline: assistance.headline,
+                      });
+                    }}
+                    className={`inline-flex size-7 items-center justify-center rounded-md transition ${
+                      isActive
+                        ? "bg-white/15 text-white hover:bg-white/25"
+                        : "bg-white/70 text-ocean-700 hover:bg-white"
+                    }`}
+                    aria-label={`Rename ${assistance.label}`}
+                    disabled={isSaving}
+                  >
+                    <PencilIcon />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <AssistanceManagement
+        open={isAddAssistanceOpen}
+        onClose={() => {
+          setIsAddAssistanceOpen(false);
+          setSaveError("");
+        }}
+        onCreate={handleCreateAssistance}
+        isSaving={isSaving}
+        statusMessage={isAddAssistanceOpen ? saveError : ""}
+      />
+
+      {editingCategory ? (
+        <CategoryEditDialog
+          category={editingCategory}
+          serviceCount={
+            assistances.find((c) => c.categoryUuid === editingCategory.uuid)?.services?.length ?? 0
+          }
+          isSaving={isSaving}
+          error={saveError}
+          onClose={() => {
+            setEditingCategory(null);
+            setSaveError("");
+          }}
+          onSave={async (next) => {
+            await handleUpdateCategory(editingCategory.uuid, next);
+            setEditingCategory(null);
+          }}
+          onArchive={async () => {
+            await handleDeleteCategory(editingCategory.uuid);
+            setEditingCategory(null);
+          }}
+        />
+      ) : null}
+
+      {serviceModal}
+
+      {selectedAssistance ? (
+        <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(10,70,111,0.7)]">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">Services</p>
+              <h3 className="mt-2 text-xl font-semibold tracking-tight text-ocean-950">
+                {selectedAssistance.headline}
+              </h3>
+            </div>
+            {saveError && !isAddServiceOpen ? (
+              <p className="text-xs font-medium text-rose-600">{saveError}</p>
+            ) : null}
+          </div>
+
+          <div className="mt-5 grid gap-3">
+            {selectedAssistance.services.map((service) => (
+              <article
+                key={service.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => openEditServiceModal(service)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openEditServiceModal(service);
+                  }
+                }}
+                className="group flex cursor-pointer items-start gap-3 rounded-xl border border-ocean-200 bg-ocean-50/60 px-4 py-3 transition hover:border-ocean-300 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-400"
+              >
+                  <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-ocean-200 bg-white p-1">
+                    <ServiceIconDisplay
+                      src={service.image}
+                      alt={service.name}
+                      placeholderIconClassName="size-6"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-sm font-semibold text-ocean-900">{service.name}</h4>
+                    <p className="mt-1 truncate text-sm text-ocean-700">{stripRichText(service.description)}</p>
+                  </div>
+              </article>
+            ))}
+            <button
+              type="button"
+              onClick={openCreateServiceModal}
+              disabled={isSaving}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-ocean-300 bg-white text-sm font-semibold text-ocean-700 transition hover:border-ocean-400 hover:bg-ocean-50 disabled:opacity-60"
+            >
+              <PlusIcon />
+              Add More Services
+            </button>
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}

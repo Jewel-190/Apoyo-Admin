@@ -41,7 +41,7 @@ Protected routes (inside main layout):
 - `/applications/resubmissions`
 - `/applications/review`
 - `/applications/finalize-docs`
-- `/archive`
+- `/approved`
 - `/notifications`
 - `/reports`
 - `/activity-logs`

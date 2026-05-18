@@ -4,20 +4,10 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import MainLayout from "./layouts/MainLayout";
-import Dashboard from "./Modules/Dashboard";
-import Overview from "./Modules/Applications/Overview";
-import ActionRequired from "./Modules/Applications/ActionRequired";
-import Resubmissions from "./Modules/Applications/Resubmissions";
-import Scheduling from "./Modules/ForApproval/Scheduling";
-import CaseStudy from "./Modules/ForApproval/CaseStudy";
-import Archive from "./Modules/Archive";
-import Notifications from "./Modules/Notifications";
-import Reports from "./Modules/Reports";
-import ActivityLogs from "./Modules/ActivityLogs";
 import AdminLogin from "./pages/AdminLogin";
-import ProtectedRoute from "./components/ProtectedRoute";
-import { AuthProvider, useAuth } from "./context/AuthContext";
+import AdminRoutes from "./admin/AdminRoutes";
+import SuperadminRoutes from "./superadmin/SuperadminRoutes";
+import { AuthProvider, useAuth } from "./shared/context/AuthContext";
 
 const LAST_PROTECTED_ROUTE_KEY = "apoyo_admin_last_protected_route";
 
@@ -31,11 +21,11 @@ function resolveInitialRoute() {
     // Ignore storage access failures.
   }
 
-  return "/dashboard";
+  return "/admin/dashboard";
 }
 
 function IndexRedirect() {
-  const { loading, isAuthorizedAdmin } = useAuth();
+  const { loading, isAuthorizedAdmin, isAuthorizedSuperadmin } = useAuth();
 
   if (loading) {
     return (
@@ -43,6 +33,10 @@ function IndexRedirect() {
         Restoring session...
       </div>
     );
+  }
+
+  if (isAuthorizedSuperadmin) {
+    return <Navigate to="/superadmin/dashboard" replace />;
   }
 
   if (isAuthorizedAdmin) {
@@ -57,49 +51,12 @@ function AppRoutes() {
     <Routes>
       {/* 🔓 PUBLIC ROUTE: Login */}
       <Route path="/login" element={<AdminLogin />} />
+      <Route path="/admin/login" element={<AdminLogin />} />
 
-      {/* 🔐 PROTECTED ROUTES: Wrapped with MainLayout (includes SideNavbar) */}
-      <Route
-        element={
-          <ProtectedRoute>
-            <MainLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route path="/dashboard" element={<Dashboard />} />
-
-        {/* Application sub-routes */}
-        <Route
-          path="/applications"
-          element={<Navigate to="/applications/overview" replace />}
-        />
-        <Route path="/applications/overview" element={<Overview />} />
-        <Route
-          path="/applications/action-required"
-          element={<ActionRequired />}
-        />
-        <Route
-          path="/applications/resubmissions"
-          element={<Resubmissions />}
-        />
-        <Route
-          path="/applications/review"
-          element={<Navigate to="/applications/overview" replace />}
-        />
-        <Route
-          path="/applications/finalize-docs"
-          element={<Navigate to="/applications/overview" replace />}
-        />
-
-        <Route path="/scheduling" element={<Scheduling />} />
-        <Route path="/case-study" element={<CaseStudy />} />
-
-        {/* Other dashboard sections */}
-        <Route path="/archive" element={<Archive />} />
-        <Route path="/notifications" element={<Notifications />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/activity-logs" element={<ActivityLogs />} />
-      </Route>
+      {/* Admin surface */}
+      <Route path="/admin/*" element={<AdminRoutes />} />
+      {/* Superadmin surface */}
+      <Route path="/superadmin/*" element={<SuperadminRoutes />} />
 
       {/* 🔄 Default redirect */}
       <Route index element={<IndexRedirect />} />

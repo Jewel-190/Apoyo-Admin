@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import apoyoLogo from "../assets/apoyo1.png";
 import dasmaLogo from "../assets/Dasma.png";
 import headphones from "../assets/headphones.png";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../shared/context/AuthContext";
 
 const LAST_PROTECTED_ROUTE_KEY = "apoyo_admin_last_protected_route";
 
@@ -18,14 +18,28 @@ export default function AdminLogin() {
   const [errorMessage, setErrorMessage] = useState("");
   const [accountLoggedInWarning, setAccountLoggedInWarning] = useState("");
   const navigate = useNavigate();
-  const { signIn, isAuthorizedAdmin, checkAccountCurrentlyLoggedIn, loading } =
-    useAuth();
+  const {
+    signIn,
+    isAuthorizedAdmin,
+    isAuthorizedSuperadmin,
+    checkAccountCurrentlyLoggedIn,
+    loading,
+  } = useAuth();
 
   useEffect(() => {
-    if (!loading && isAuthorizedAdmin) {
-      navigate("/dashboard", { replace: true });
+    if (loading) {
+      return;
     }
-  }, [isAuthorizedAdmin, loading, navigate]);
+
+    if (isAuthorizedSuperadmin) {
+      navigate("/superadmin/dashboard", { replace: true });
+      return;
+    }
+
+    if (isAuthorizedAdmin) {
+      navigate("/admin/dashboard", { replace: true });
+    }
+  }, [isAuthorizedAdmin, isAuthorizedSuperadmin, loading, navigate]);
 
   useEffect(() => {
     // Cleanup from previous lockout implementation.
@@ -79,7 +93,7 @@ export default function AdminLogin() {
     setIsLoading(true);
 
     try {
-      const { error } = await signIn({
+      const { data, error } = await signIn({
         email: normalizedEmail,
         password,
         rememberMe,
@@ -96,7 +110,12 @@ export default function AdminLogin() {
         // Ignore storage write failures.
       }
 
-      navigate("/dashboard", { replace: true });
+      // Redirect based on server-authorized role.
+      if (data?.profile?.role === "super_admin") {
+        navigate("/superadmin/dashboard", { replace: true });
+      } else {
+        navigate("/admin/dashboard", { replace: true });
+      }
     } catch {
       setErrorMessage("Unable to log in right now. Please try again.");
     } finally {

@@ -1,1 +1,39 @@
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --color-ocean-50: #eff9ff;
+  --color-ocean-100: #dff2ff;
+  --color-ocean-200: #c4e8ff;
+  --color-ocean-300: #8ed7ff;
+  --color-ocean-400: #4ec0f5;
+  --color-ocean-500: #1fa7e6;
+  --color-ocean-600: #1388c7;
+  --color-ocean-700: #0f6f9f;
+  --color-ocean-800: #0d597f;
+  --color-ocean-900: #0c4866;
+  --color-ocean-950: #072a40;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@keyframes batch-import-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@layer utilities {
+  .batch-import-progress-indeterminate {
+    animation: batch-import-slide 1.35s ease-in-out infinite;
+  }
+}
