@@ -2,17 +2,23 @@
 
 @theme {
   --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
-  --color-ocean-50: #eff9ff;
-  --color-ocean-100: #dff2ff;
-  --color-ocean-200: #c4e8ff;
-  --color-ocean-300: #8ed7ff;
-  --color-ocean-400: #4ec0f5;
-  --color-ocean-500: #1fa7e6;
-  --color-ocean-600: #1388c7;
-  --color-ocean-700: #0f6f9f;
-  --color-ocean-800: #0d597f;
-  --color-ocean-900: #0c4866;
-  --color-ocean-950: #072a40;
+  /**
+   * Superadmin foundation palette — anchored on brand primary #0B8F8B (ocean-600).
+   * Lightness ramp is preserved from the previous palette so existing
+   * `from-ocean-X via-ocean-Y to-ocean-Z` gradients keep their depth, only
+   * the hue shifts to teal.
+   */
+  --color-ocean-50: #effbfa;
+  --color-ocean-100: #d8f4f3;
+  --color-ocean-200: #b3e8e6;
+  --color-ocean-300: #82d6d3;
+  --color-ocean-400: #4cbcb8;
+  --color-ocean-500: #1fa49f;
+  --color-ocean-600: #0b8f8b;
+  --color-ocean-700: #0a7773;
+  --color-ocean-800: #0a5e5b;
+  --color-ocean-900: #0a4a48;
+  --color-ocean-950: #042b2a;
 }
 
 @layer base {

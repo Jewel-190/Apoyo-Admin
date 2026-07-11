@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, Wallet } from "lucide-react";
 import { supabase } from "../../../shared/lib/supabaseClient";
 import { useAuth } from "../../../shared/context/AuthContext";
@@ -14,18 +14,7 @@ import {
 import { formatCaseStudyDateTimeDisplay } from "../../../shared/lib/schedulingDateTime";
 import { DetailActionsPanel, InterviewInstructions } from "../../components/forApprovalDetailUi";
 import { detailFont, detailPrimaryButtonCompactClass } from "../../components/forApprovalDetailStyles";
-
-const STATUS_BADGE_STYLES = {
-  "In Progress": "bg-blue-50 text-blue-400",
-  Pending: "bg-purple-100 text-purple-600",
-  "Action Required": "bg-orange-100 text-orange-700",
-  Resubmitted: "bg-yellow-100 text-yellow-700",
-  "For Approval": "bg-gray-50 text-[color:var(--apoyo-primary)] ring-1 ring-[color-mix(in_srgb,var(--apoyo-primary)_28%,transparent)]",
-  Scheduled: "bg-sky-100 text-sky-800",
-  Approved: "bg-green-100 text-green-700",
-  "Case Study": "bg-blue-100 text-blue-800",
-  Draft: "bg-gray-100 text-gray-700",
-};
+import { getAdminRequestStatusBadgeStyle } from "../../../shared/lib/adminLineStatusStyles";
 
 /**
  * Shared split-panel detail:
@@ -118,7 +107,7 @@ export default function ApprovalReviewDetails({
   }, [application?.serviceId, application?.requestId, application?.userId, allowedServiceIds]);
 
   const requestStatus = normalizeStatus(requestData?.status || application?.status);
-  const statusClass = STATUS_BADGE_STYLES[requestStatus] || STATUS_BADGE_STYLES.Pending;
+  const statusBadgeStyle = getAdminRequestStatusBadgeStyle(requestStatus);
 
   const dateApplied = formatDateLong(
     requestData?.submitted_at ||
@@ -241,7 +230,10 @@ export default function ApprovalReviewDetails({
 
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-semibold text-gray-800">Status:</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusClass}`}>
+                  <span
+                    className="px-2 py-0.5 rounded-full text-xs font-medium"
+                    style={statusBadgeStyle}
+                  >
                     {requestStatus}
                   </span>
                 </div>

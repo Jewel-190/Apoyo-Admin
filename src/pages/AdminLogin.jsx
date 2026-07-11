@@ -1,14 +1,43 @@
 // ============================================
 // FILE: AdminLogin.jsx — Login page
 // ============================================
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import apoyoLogo from "../assets/apoyo1.png";
 import dasmaLogo from "../assets/Dasma.png";
 import headphones from "../assets/headphones.png";
 import { useAuth } from "../shared/context/AuthContext";
 
-const LAST_PROTECTED_ROUTE_KEY = "apoyo_admin_last_protected_route";
+// Client-side brute-force throttle. After MAX_FAILED_ATTEMPTS consecutive
+// failures the form locks for LOCKOUT_DURATION_MS. Persisted in localStorage so
+// a page reload can't trivially reset it. Real rate limiting is enforced by
+// Supabase Auth server-side; this is a UX guard on top of that.
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15_000;
+const ATTEMPTS_KEY = "apoyo_admin_login_attempts";
+const LOCK_UNTIL_KEY = "apoyo_admin_login_lock_until";
+
+function readNumber(key) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeNumber(key, value) {
+  try {
+    if (value) {
+      window.localStorage.setItem(key, String(value));
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore storage write failures.
+  }
+}
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
@@ -16,15 +45,13 @@ export default function AdminLogin() {
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [accountLoggedInWarning, setAccountLoggedInWarning] = useState("");
+  const [lockUntil, setLockUntil] = useState(() => readNumber(LOCK_UNTIL_KEY));
+  const [now, setNow] = useState(() => Date.now());
   const navigate = useNavigate();
-  const {
-    signIn,
-    isAuthorizedAdmin,
-    isAuthorizedSuperadmin,
-    checkAccountCurrentlyLoggedIn,
-    loading,
-  } = useAuth();
+  const { signIn, isAuthorizedAdmin, isAuthorizedSuperadmin, loading } = useAuth();
+
+  const isLocked = lockUntil > now;
+  const remainingSeconds = isLocked ? Math.ceil((lockUntil - now) / 1000) : 0;
 
   useEffect(() => {
     if (loading) {
@@ -41,41 +68,52 @@ export default function AdminLogin() {
     }
   }, [isAuthorizedAdmin, isAuthorizedSuperadmin, loading, navigate]);
 
+  // Tick the countdown only while a lockout is active.
   useEffect(() => {
-    // Cleanup from previous lockout implementation.
-    localStorage.removeItem("apoyo_login_attempts");
-    localStorage.removeItem("apoyo_login_lock_until");
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (!normalizedEmail) {
-      setAccountLoggedInWarning("");
-      return () => {
-        isMounted = false;
-      };
+    if (lockUntil <= Date.now()) {
+      return undefined;
     }
 
-    const timerId = window.setTimeout(async () => {
-      const isActive = await checkAccountCurrentlyLoggedIn(normalizedEmail);
-      if (!isMounted) {
-        return;
+    const timerId = window.setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current >= lockUntil) {
+        setLockUntil(0);
+        writeNumber(LOCK_UNTIL_KEY, 0);
+        writeNumber(ATTEMPTS_KEY, 0);
+        window.clearInterval(timerId);
       }
-      setAccountLoggedInWarning(
-        isActive ? "This user is logged in on another device/browser." : ""
-      );
-    }, 300);
+    }, 250);
 
-    return () => {
-      isMounted = false;
-      window.clearTimeout(timerId);
-    };
-  }, [email, checkAccountCurrentlyLoggedIn]);
+    return () => window.clearInterval(timerId);
+  }, [lockUntil]);
+
+  const registerFailedAttempt = useCallback(() => {
+    const attempts = readNumber(ATTEMPTS_KEY) + 1;
+
+    if (attempts >= MAX_FAILED_ATTEMPTS) {
+      const until = Date.now() + LOCKOUT_DURATION_MS;
+      writeNumber(ATTEMPTS_KEY, 0);
+      writeNumber(LOCK_UNTIL_KEY, until);
+      setLockUntil(until);
+      setNow(Date.now());
+    } else {
+      writeNumber(ATTEMPTS_KEY, attempts);
+    }
+  }, []);
+
+  const clearFailedAttempts = useCallback(() => {
+    writeNumber(ATTEMPTS_KEY, 0);
+    writeNumber(LOCK_UNTIL_KEY, 0);
+    setLockUntil(0);
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
+
+    if (isLocked) {
+      return;
+    }
 
     setErrorMessage("");
 
@@ -100,36 +138,28 @@ export default function AdminLogin() {
       });
 
       if (error) {
+        registerFailedAttempt();
         setErrorMessage(error.message || "Invalid credentials.");
         return;
       }
 
-      try {
-        window.sessionStorage.removeItem(LAST_PROTECTED_ROUTE_KEY);
-      } catch {
-        // Ignore storage write failures.
-      }
+      clearFailedAttempts();
 
-      // Redirect based on server-authorized role.
-      if (data?.profile?.role === "super_admin") {
+      // Redirect based on server-authorized privilege.
+      if (data?.profile?.is_super_admin === true) {
         navigate("/superadmin/dashboard", { replace: true });
       } else {
         navigate("/admin/dashboard", { replace: true });
       }
     } catch {
+      registerFailedAttempt();
       setErrorMessage("Unable to log in right now. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-gray-500 text-sm">
-        Restoring session...
-      </div>
-    );
-  }
+  const controlsDisabled = isLoading || isLocked || loading;
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -171,14 +201,10 @@ export default function AdminLogin() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={controlsDisabled}
                 autoComplete="email"
-                className="border border-teal-500 rounded-lg px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-400 placeholder-gray-400 w-full"
+                className="border border-teal-500 rounded-lg px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-400 placeholder-gray-400 w-full disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
-              {accountLoggedInWarning && (
-                <p className="text-xs text-amber-600 mt-1">
-                  {accountLoggedInWarning}
-                </p>
-              )}
             </div>
 
             <div className="flex flex-col gap-1">
@@ -191,8 +217,9 @@ export default function AdminLogin() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={controlsDisabled}
                 autoComplete="current-password"
-                className="border border-teal-500 rounded-lg px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-400 placeholder-gray-400 w-full"
+                className="border border-teal-500 rounded-lg px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-400 placeholder-gray-400 w-full disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -202,6 +229,7 @@ export default function AdminLogin() {
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
+                  disabled={controlsDisabled}
                   className="w-4 h-4 rounded border-gray-400"
                 />
                 Remember me
@@ -221,18 +249,29 @@ export default function AdminLogin() {
 
             <button
               type="submit"
-              disabled={isLoading}
-              className="mt-2 py-3 rounded-lg text-white font-semibold text-sm transition-all duration-300 hover:opacity-90 hover:scale-[1.02] hover:shadow-lg active:scale-95 w-full"
+              disabled={controlsDisabled}
+              className="mt-2 py-3 rounded-lg text-white font-semibold text-sm transition-all duration-300 hover:opacity-90 hover:scale-[1.02] hover:shadow-lg active:scale-95 w-full disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none"
               style={{
                 background: "linear-gradient(to right, #008B88, #87CE60)",
-                opacity: isLoading ? 0.8 : 1,
+                opacity: controlsDisabled ? 0.8 : 1,
               }}
             >
-              {isLoading ? "Logging in..." : "Log In"}
+              {isLocked
+                ? `Try again in ${remainingSeconds}s`
+                : isLoading
+                ? "Logging in..."
+                : "Log In"}
             </button>
 
-            {errorMessage && (
-              <p className="text-sm text-red-500 mt-1">{errorMessage}</p>
+            {isLocked ? (
+              <p className="text-sm text-amber-600 mt-1">
+                Too many failed attempts. Login is locked for {remainingSeconds}{" "}
+                second{remainingSeconds === 1 ? "" : "s"}.
+              </p>
+            ) : (
+              errorMessage && (
+                <p className="text-sm text-red-500 mt-1">{errorMessage}</p>
+              )
             )}
           </form>
         </div>

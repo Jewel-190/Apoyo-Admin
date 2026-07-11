@@ -1,14 +1,6 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { X } from "lucide-react";
-
-const RESULT_BADGE_STYLES = {
-  Pending: { backgroundColor: "#F3E8FF", color: "#C084FC" },
-  "Action Required": { backgroundColor: "#FED7AA", color: "#EA580C" },
-  Verified: { backgroundColor: "#DCFCE7", color: "#166534" },
-  "In Progress": { backgroundColor: "#EFF6FF", color: "#60A5FA" },
-  Resubmitted: { backgroundColor: "#FEF9C3", color: "#CA8A04" },
-  Approved: { backgroundColor: "#DCFCE7", color: "#15803D" },
-};
+import { getAdminDocumentResultBadgeStyle } from "../../../shared/lib/adminLineStatusStyles";
 
 function normalizeDocumentResult(value) {
   const key = String(value || "pending").trim().toLowerCase();
@@ -59,6 +51,7 @@ function FinalizeDocs({
   documents = [],
   onBack,
   onSendBack,
+  onProceedToFinalApproval,
   asOverlay = false,
   disableSendBack = false,
   disableSendBackReason = "",
@@ -78,11 +71,19 @@ function FinalizeDocs({
   const hasResubmittedDocuments = normalizedDocuments.some(
     (doc) => doc.normalizedResult === "Resubmitted"
   );
+  const allDocumentsApproved =
+    normalizedDocuments.length > 0 &&
+    normalizedDocuments.every(
+      (doc) =>
+        doc.normalizedResult === "Approved" || doc.normalizedResult === "Verified"
+    );
   const derivedSendBackBlockReason = hasInProgressDocuments
     ? "You cannot send this request back while at least one document is still In Progress."
     : hasResubmittedDocuments
       ? "You cannot send this request back while there are documents still tagged as Resubmitted."
-      : "";
+      : allDocumentsApproved
+        ? "All documents are verified. Continue to final approval instead of sending back."
+        : "";
   const sendBackBlockReason = disableSendBack
     ? (disableSendBackReason ||
       "You cannot send this request back in its current status.")
@@ -227,8 +228,7 @@ function FinalizeDocs({
                     <span
                       className="px-3 py-1 rounded-full text-xs inline-block whitespace-nowrap"
                       style={{
-                        ...(RESULT_BADGE_STYLES[doc.normalizedResult] ||
-                          RESULT_BADGE_STYLES.Pending),
+                        ...getAdminDocumentResultBadgeStyle(doc.normalizedResult),
                         fontFamily: "'Instrument Sans', sans-serif",
                         fontWeight: 500,
                       }}
@@ -252,7 +252,7 @@ function FinalizeDocs({
         </div>
 
         {/* Buttons */}
-        <div className="flex justify-center gap-6 mt-12">
+        <div className="flex justify-center gap-6 mt-12 flex-wrap">
           <button
             onClick={onBack}
             className="px-8 py-3 rounded-full text-sm transition hover:shadow-lg"
@@ -265,24 +265,40 @@ function FinalizeDocs({
           >
             Back to Review
           </button>
-          <button
-            onClick={handleSendBackClick}
-            className="px-8 py-3 rounded-full text-sm transition border-2 hover:shadow-lg"
-            disabled={Boolean(sendBackBlockReason)}
-            style={{
-              backgroundColor: sendBackBlockReason ? "#F3F4F6" : "#FFFBEB",
-              color: sendBackBlockReason ? "#9CA3AF" : "#FF8500",
-              borderColor: sendBackBlockReason ? "#D1D5DB" : "#FF8500",
-              fontFamily: "'Instrument Sans', sans-serif",
-              fontWeight: 500,
-              cursor: sendBackBlockReason ? "not-allowed" : "pointer",
-            }}
-          >
-            Send back to Applicant
-          </button>
+          {allDocumentsApproved && typeof onProceedToFinalApproval === "function" ? (
+            <button
+              type="button"
+              onClick={onProceedToFinalApproval}
+              className="px-8 py-3 rounded-full text-sm transition hover:shadow-lg"
+              style={{
+                backgroundColor: "#008B88",
+                color: "#FFFFFF",
+                fontFamily: "'Instrument Sans', sans-serif",
+                fontWeight: 500,
+              }}
+            >
+              Continue to Final Approval
+            </button>
+          ) : (
+            <button
+              onClick={handleSendBackClick}
+              className="px-8 py-3 rounded-full text-sm transition border-2 hover:shadow-lg"
+              disabled={Boolean(sendBackBlockReason)}
+              style={{
+                backgroundColor: sendBackBlockReason ? "#F3F4F6" : "#FFFBEB",
+                color: sendBackBlockReason ? "#9CA3AF" : "#FF8500",
+                borderColor: sendBackBlockReason ? "#D1D5DB" : "#FF8500",
+                fontFamily: "'Instrument Sans', sans-serif",
+                fontWeight: 500,
+                cursor: sendBackBlockReason ? "not-allowed" : "pointer",
+              }}
+            >
+              Send back to Applicant
+            </button>
+          )}
         </div>
 
-        {sendBackBlockReason && (
+        {sendBackBlockReason && !allDocumentsApproved && (
           <p className="text-center mt-4 text-sm text-red-500">
             {sendBackBlockReason}
           </p>

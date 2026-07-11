@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import appLogo from "../../assets/apoyo1.png";
 import { useAuth } from "../../shared/context/AuthContext";
@@ -62,6 +63,82 @@ function startsWithPath(currentPath, targetPath) {
   return cur === tgt || cur.startsWith(`${tgt}/`);
 }
 
+const LogoutIcon = () => (
+  <svg className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" strokeLinecap="round" />
+    <path d="M16 17l5-5-5-5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M21 12H9" strokeLinecap="round" />
+  </svg>
+);
+
+function LogoutConfirmModal({ open, onCancel, onConfirm, isLoggingOut }) {
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  if (!open) {
+    return null;
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="superadmin-logout-confirm-title"
+    >
+      <div className="w-full max-w-md rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_20px_45px_-24px_rgba(10,70,111,0.6)]">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-ocean-200 bg-ocean-50 text-ocean-700">
+            <LogoutIcon />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ocean-700/80">
+              Superadmin
+            </p>
+            <h3
+              id="superadmin-logout-confirm-title"
+              className="mt-0.5 text-lg font-semibold tracking-tight text-ocean-950"
+            >
+              Log Out
+            </h3>
+            <p className="mt-1.5 text-sm text-ocean-700">
+              Are you sure you want to log out of the superadmin workspace?
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isLoggingOut}
+            className="inline-flex h-9 items-center rounded-lg border border-ocean-200 bg-white px-3 text-sm font-semibold text-ocean-700 transition-colors hover:bg-ocean-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isLoggingOut}
+            className="inline-flex h-9 items-center rounded-lg bg-rose-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isLoggingOut ? "Logging out..." : "Log Out"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 export function Sidebar({ mobileOpen, onMobileClose }) {
   const location = useLocation();
   const pathname = location.pathname;
@@ -79,6 +156,24 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
   }, [pathname]);
 
   const [openBranches, setOpenBranches] = useState(defaultOpen);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogoutConfirm = useCallback(async () => {
+    if (isLoggingOut) {
+      return;
+    }
+
+    setIsLoggingOut(true);
+    try {
+      await signOut();
+      onMobileClose?.();
+      navigate("/login", { replace: true });
+    } finally {
+      setIsLoggingOut(false);
+      setLogoutConfirmOpen(false);
+    }
+  }, [isLoggingOut, navigate, onMobileClose, signOut]);
 
   const toggleBranch = useCallback((id) => {
     setOpenBranches((prev) => {
@@ -184,11 +279,7 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
       <div className="shrink-0 border-t border-white/10 px-3 py-4">
         <button
           type="button"
-          onClick={async () => {
-            await signOut();
-            onMobileClose?.();
-            navigate("/login", { replace: true });
-          }}
+          onClick={() => setLogoutConfirmOpen(true)}
           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-ocean-200/80 transition-all duration-200 hover:bg-rose-500/10 hover:text-rose-200"
         >
           <svg className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -214,13 +305,24 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
 
       <aside
         id="navigation-sidebar"
-        className={`fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(100%,18rem)] shrink-0 flex-col border-r border-white/10 bg-gradient-to-b from-ocean-900 via-ocean-950 to-[#041b2e] font-sans shadow-[8px_0_40px_-12px_rgba(6,40,70,0.55)] transition-transform duration-200 ease-out lg:w-[var(--superadmin-sidebar-w)] lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(100%,18rem)] shrink-0 flex-col border-r border-white/10 bg-gradient-to-b from-ocean-900 via-ocean-950 to-[#021918] font-sans shadow-[8px_0_40px_-12px_rgba(4,43,42,0.55)] transition-transform duration-200 ease-out lg:w-[var(--superadmin-sidebar-w)] lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         aria-label="Main navigation"
       >
         {sidebarInner}
       </aside>
+
+      <LogoutConfirmModal
+        open={logoutConfirmOpen}
+        onCancel={() => {
+          if (!isLoggingOut) {
+            setLogoutConfirmOpen(false);
+          }
+        }}
+        onConfirm={handleLogoutConfirm}
+        isLoggingOut={isLoggingOut}
+      />
     </>
   );
 }

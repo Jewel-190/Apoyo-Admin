@@ -2,15 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { Search, Eye, AlertCircle, RefreshCcw } from "lucide-react";
 import MiniNotifications from "../../components/MiniNotifications";
 import ReviewApplications from "./ReviewApplications";
-import { fetchApplicationsBySources } from "../../../shared/lib/requestData";
-import { lineAdminInsetHairline } from "../../../shared/lib/adminLineStatusStyles";
+import { fetchApplicationsBySources, invalidateAdminPipelineCaches } from "../../../shared/lib/requestData";
+import {
+  matchesPipelineApplicationSearch,
+  PIPELINE_SEARCH_PLACEHOLDER,
+} from "../../../shared/lib/pipelineSearch";
+import {
+  getAdminRequestStatusBadgeStyle,
+  getAdminRequestStatusChartColor,
+  lineAdminInsetHairline,
+} from "../../../shared/lib/adminLineStatusStyles";
 import { useAuth } from "../../../shared/context/AuthContext";
+import { useOpenRequestFromLocation } from "../../../shared/hooks/useOpenRequestFromLocation";
 
 function StatusBadge({ status }) {
   return (
     <span
       className="px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 w-fit"
-      style={{ backgroundColor: "#FEF3C7", color: "#D97706" }}
+      style={getAdminRequestStatusBadgeStyle(status)}
     >
       <AlertCircle size={12} />
       {status}
@@ -54,7 +63,9 @@ export default function ActionRequired() {
       setLoadError("");
 
       try {
-        const merged = await fetchApplicationsBySources(sourceTables);
+        const merged = await fetchApplicationsBySources(sourceTables, {
+          forceRefresh: reloadKey > 0,
+        });
 
         if (!isMounted) {
           return;
@@ -84,29 +95,23 @@ export default function ActionRequired() {
     };
   }, [reloadKey, sourceTables]);
 
-  const normalizedSearch = searchTerm.trim().toLowerCase();
-
   const filtered = applications
     .filter((app) => activeTab === "All" || app.category === activeTab)
-    .filter((app) => {
-      if (!normalizedSearch) {
-        return true;
-      }
-
-      return (
-        app.id.toLowerCase().includes(normalizedSearch) ||
-        app.name.toLowerCase().includes(normalizedSearch) ||
-        app.category.toLowerCase().includes(normalizedSearch) ||
-        app.status.toLowerCase().includes(normalizedSearch)
-      );
-    });
+    .filter((app) => matchesPipelineApplicationSearch(app, searchTerm));
 
   const handleReviewClick = (application) => {
     setSelectedApplication(application);
     setShowReview(true);
   };
 
+  useOpenRequestFromLocation({
+    applications,
+    isLoading,
+    onOpen: handleReviewClick,
+  });
+
   const handleReload = () => {
+    invalidateAdminPipelineCaches();
     setReloadKey((previous) => previous + 1);
   };
 
@@ -115,6 +120,7 @@ export default function ActionRequired() {
     setSelectedApplication(null);
     setSearchTerm("");
     setActiveTab("All");
+    invalidateAdminPipelineCaches();
     setReloadKey((previous) => previous + 1);
   };
 
@@ -128,7 +134,7 @@ export default function ActionRequired() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="w-full">
       <div className="flex items-center justify-between mb-6 gap-4">
         <div className="relative w-full max-w-lg">
           <Search
@@ -137,7 +143,7 @@ export default function ActionRequired() {
           />
           <input
             type="text"
-            placeholder="Search"
+            placeholder={PIPELINE_SEARCH_PLACEHOLDER}
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
             className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white text-sm text-gray-500 outline-none shadow-md border border-gray-100 focus:ring-2 transition-all duration-200 placeholder-gray-400"
@@ -183,16 +189,15 @@ export default function ActionRequired() {
 
         <div className="flex gap-3 mb-5 flex-wrap">
           <div
-            className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm min-w-[160px]"
-            style={{ backgroundColor: "#FFFBEB" }}
+            className="flex items-center px-4 py-2.5 rounded-xl shadow-sm min-w-[160px]"
+            style={{
+              backgroundColor: getAdminRequestStatusChartColor("Action Required"),
+              color: getAdminRequestStatusBadgeStyle("Action Required").color,
+            }}
           >
-            <span
-              className="w-3 h-3 rounded-full shrink-0"
-              style={{ backgroundColor: theme.tertiary || theme.secondary }}
-            />
             <div>
-              <p className="text-[10px] text-gray-500 font-medium">Total Action Required</p>
-              <p className="text-lg font-bold text-gray-800">{applications.length}</p>
+              <p className="text-[10px] font-semibold opacity-85">Total Action Required</p>
+              <p className="text-lg font-bold leading-none mt-0.5">{applications.length}</p>
             </div>
           </div>
         </div>
@@ -217,9 +222,9 @@ export default function ActionRequired() {
           <thead>
             <tr className="text-left text-gray-500 text-xs font-semibold">
               <th className="pb-3 pr-4">Application ID</th>
-              <th className="pb-3 pr-4">Name</th>
-              <th className="pb-3 pr-4">Category</th>
-              <th className="pb-3 pr-4">Date</th>
+              <th className="pb-3 pr-4">Applicant Name</th>
+              <th className="pb-3 pr-4">Service Category</th>
+              <th className="pb-3 pr-4">Application Date</th>
               <th className="pb-3 pr-4">Status</th>
               <th className="pb-3">Action</th>
             </tr>

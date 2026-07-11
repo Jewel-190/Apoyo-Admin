@@ -8,6 +8,7 @@ import AdminLogin from "./pages/AdminLogin";
 import AdminRoutes from "./admin/AdminRoutes";
 import SuperadminRoutes from "./superadmin/SuperadminRoutes";
 import { AuthProvider, useAuth } from "./shared/context/AuthContext";
+import WorkspaceLoadingScreen from "./shared/components/WorkspaceLoadingScreen";
 
 const LAST_PROTECTED_ROUTE_KEY = "apoyo_admin_last_protected_route";
 
@@ -28,11 +29,7 @@ function IndexRedirect() {
   const { loading, isAuthorizedAdmin, isAuthorizedSuperadmin } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-gray-500 text-sm">
-        Restoring session...
-      </div>
-    );
+    return <WorkspaceLoadingScreen />;
   }
 
   if (isAuthorizedSuperadmin) {

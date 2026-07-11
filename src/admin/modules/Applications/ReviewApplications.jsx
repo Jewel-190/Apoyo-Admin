@@ -20,7 +20,7 @@ import {
 } from "../../../shared/lib/attachmentCatalog";
 import { useAuth } from "../../../shared/context/AuthContext";
 import { markAdminNotificationsReadForAssistanceRequest } from "../../../shared/lib/adminNotifications";
-import { normalizeAttachmentResult } from "../../../shared/lib/requestData";
+import { normalizeAttachmentResult, invalidateAdminPipelineCaches } from "../../../shared/lib/requestData";
 import {
   buildDisplayName,
   formatDateLong,
@@ -33,6 +33,11 @@ import {
   canAutoTransitionToInProgress,
   normalizeStatus as normalizeRequestStatus,
 } from "../../../shared/domain/status";
+import {
+  ADMIN_DOCUMENT_ACCENT_COLORS,
+  getAdminDocumentResultBadgeStyle,
+  getAdminRequestStatusBadgeStyle,
+} from "../../../shared/lib/adminLineStatusStyles";
 
 const ATTACHMENT_BUCKET = "request-documents";
 
@@ -43,25 +48,6 @@ const ACTION_REASONS = [
   "Name Mismatch",
   "Wrong document",
 ];
-
-const STATUS_BADGE_STYLES = {
-  "In Progress": "bg-blue-50 text-blue-400",
-  Pending: "bg-purple-100 text-purple-600",
-  "Action Required": "bg-orange-100 text-orange-700",
-  Resubmitted: "bg-yellow-100 text-yellow-700",
-  "For Approval": "bg-gray-50 text-[color:var(--apoyo-primary)] ring-1 ring-[color-mix(in_srgb,var(--apoyo-primary)_28%,transparent)]",
-  Scheduled: "bg-sky-100 text-sky-800",
-  Approved: "bg-green-100 text-green-700",
-};
-
-const ATTACHMENT_RESULT_STYLES = {
-  Pending: { backgroundColor: "#F3E8FF", color: "#C084FC" },
-  "Action Required": { backgroundColor: "#FED7AA", color: "#EA580C" },
-  Verified: { backgroundColor: "#DCFCE7", color: "#166534" },
-  "In Progress": { backgroundColor: "#EFF6FF", color: "#60A5FA" },
-  Resubmitted: { backgroundColor: "#FEF9C3", color: "#CA8A04" },
-  Approved: { backgroundColor: "#DCFCE7", color: "#15803D" },
-};
 
 const FIT_EXPANDED_ZOOM_LEVEL = 100;
 const EXPANDED_ZOOM_LEVELS = [50, 75, 90, 100, 105, 110, 115, 120, 130, 140, 150, 160, 175, 200];
@@ -93,11 +79,46 @@ function isFinalApprovedDocumentResult(value) {
   return normalized === "Approved" || normalized === "Verified";
 }
 
+function isDocumentReviewed(value) {
+  const normalized = normalizeAttachmentResult(value);
+  return (
+    normalized === "Approved" ||
+    normalized === "Verified" ||
+    normalized === "Action Required"
+  );
+}
+
 function areAllDocumentsFinalApproved(documents) {
   const list = documents || [];
   return (
     list.length > 0 && list.every((doc) => isFinalApprovedDocumentResult(doc?.result))
   );
+}
+
+function areAllDocumentsReviewed(documents) {
+  const list = documents || [];
+  return list.length > 0 && list.every((doc) => isDocumentReviewed(doc?.result));
+}
+
+function findNextUnreviewedDocumentIndex(documents, fromIndex = -1) {
+  const list = documents || [];
+  if (list.length === 0) {
+    return -1;
+  }
+
+  for (let index = fromIndex + 1; index < list.length; index += 1) {
+    if (!isDocumentReviewed(list[index]?.result)) {
+      return index;
+    }
+  }
+
+  for (let index = 0; index <= fromIndex; index += 1) {
+    if (!isDocumentReviewed(list[index]?.result)) {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 function findFirstResubmittedDocumentIndex(documents) {
@@ -316,8 +337,7 @@ async function fetchRequestAttachments(labelSourceTable, requestId) {
   const { data, error } = await supabase
     .from("request_attachments")
     .select("*")
-    .or(`assistance_request_id.eq.${requestId},request_uid.eq.${requestId}`)
-    .eq("request_table", "assistance_requests");
+    .eq("assistance_request_id", requestId);
 
   const rows = (data || []).filter((row) => {
     const path = String(row?.path ?? "").trim();
@@ -604,6 +624,10 @@ async function updateAttachmentReview(document, payload) {
       .eq("uid", document.id);
   }
 
+  if (!response.error) {
+    invalidateAdminPipelineCaches();
+  }
+
   return response;
 }
 
@@ -727,6 +751,8 @@ function ReviewApplications({
               inProgressError.message ||
                 "Failed to sync request status to In Progress."
             );
+          } else {
+            invalidateAdminPipelineCaches();
           }
         }
 
@@ -911,17 +937,45 @@ function ReviewApplications({
   };
 
   const openFinalizeFromDocuments = (documents) => {
-    const allDocumentsApproved =
-      documents.length > 0 &&
-      documents.every((doc) => isFinalApprovedDocumentResult(doc?.result));
-
-    if (allDocumentsApproved) {
-      setShowFinalApproval(true);
-      setShowFinalizeDocs(false);
+    if (!documents?.length) {
       return;
     }
 
+    // All verified → go straight to Approve Application Files modal.
+    if (areAllDocumentsFinalApproved(documents)) {
+      setShowFinalizeDocs(false);
+      setShowFinalApproval(true);
+      return;
+    }
+
+    // Mixed / action-required decisions → Verification Summary Table.
+    setShowFinalApproval(false);
     setShowFinalizeDocs(true);
+  };
+
+  const advanceAfterDocumentDecision = (nextDocuments) => {
+    if (areAllDocumentsFinalApproved(nextDocuments)) {
+      setShowFinalizeDocs(false);
+      setShowFinalApproval(true);
+      return;
+    }
+
+    if (areAllDocumentsReviewed(nextDocuments)) {
+      openFinalizeFromDocuments(nextDocuments);
+      return;
+    }
+
+    const nextIndex = findNextUnreviewedDocumentIndex(
+      nextDocuments,
+      currentDocumentIndex
+    );
+
+    if (nextIndex >= 0) {
+      setCurrentDocumentIndex(nextIndex);
+      return;
+    }
+
+    moveToNextDocument();
   };
 
   const handleMarkAsActionRequired = async () => {
@@ -959,13 +1013,7 @@ function ReviewApplications({
         persistedStatus,
       });
       setDocumentsList(nextDocuments);
-
-      const isLastDocument = currentDocumentIndex >= documentsList.length - 1;
-      if (isLastDocument) {
-        openFinalizeFromDocuments(nextDocuments);
-      } else {
-        moveToNextDocument();
-      }
+      advanceAfterDocumentDecision(nextDocuments);
     } catch (error) {
       setSaveError(error?.message || "Failed to update attachment.");
     } finally {
@@ -999,20 +1047,7 @@ function ReviewApplications({
         persistedStatus,
       });
       setDocumentsList(nextDocuments);
-
-      if (areAllDocumentsFinalApproved(nextDocuments)) {
-        setShowFinalApproval(true);
-        setShowFinalizeDocs(false);
-        setCurrentDocumentIndex(0);
-        return;
-      }
-
-      const isLastDocument = currentDocumentIndex >= documentsList.length - 1;
-      if (isLastDocument) {
-        openFinalizeFromDocuments(nextDocuments);
-      } else {
-        moveToNextDocument();
-      }
+      advanceAfterDocumentDecision(nextDocuments);
     } catch (error) {
       setSaveError(error?.message || "Failed to update attachment.");
     } finally {
@@ -1027,7 +1062,22 @@ function ReviewApplications({
 
     setSaveError("");
 
+    if (areAllDocumentsFinalApproved(documentsList)) {
+      setShowFinalizeDocs(false);
+      setShowFinalApproval(true);
+      return;
+    }
+
     openFinalizeFromDocuments(documentsList);
+  };
+
+  const handleProceedToFinalApproval = () => {
+    if (readOnly || !areAllDocumentsFinalApproved(documentsList)) {
+      return;
+    }
+
+    setShowFinalizeDocs(false);
+    setShowFinalApproval(true);
   };
 
   const handleBackToReview = () => {
@@ -1061,6 +1111,8 @@ function ReviewApplications({
       if (error) {
         throw error;
       }
+
+      invalidateAdminPipelineCaches();
 
       setRequestData((previous) => ({
         ...(previous || {}),
@@ -1137,6 +1189,8 @@ function ReviewApplications({
         throw error;
       }
 
+      invalidateAdminPipelineCaches();
+
       setRequestData((previous) => ({
         ...(previous || {}),
         status: "action required",
@@ -1209,8 +1263,7 @@ function ReviewApplications({
   const requestStatus = normalizeRequestStatus(
     requestData?.status || application?.status
   );
-  const statusClass =
-    STATUS_BADGE_STYLES[requestStatus] || STATUS_BADGE_STYLES["In Progress"];
+  const statusBadgeStyle = getAdminRequestStatusBadgeStyle(requestStatus);
 
   const dateApplied = formatDateLong(
     requestData?.submitted_at ||
@@ -1265,8 +1318,7 @@ function ReviewApplications({
   const coverageRows = resolveCoverageRows(requestData);
 
   const currentDocResult = currentDoc?.result || "Pending";
-  const currentDocResultStyle =
-    ATTACHMENT_RESULT_STYLES[currentDocResult] || ATTACHMENT_RESULT_STYLES.Pending;
+  const currentDocResultStyle = getAdminDocumentResultBadgeStyle(currentDocResult);
   const expandedDocIsPdf = isPdfAttachment(expandedImageDoc);
 
   return (
@@ -1292,7 +1344,8 @@ function ReviewApplications({
             {!readOnly && (
               <button
                 onClick={handleFinalizeDocs}
-                className="px-5 py-2 bg-green-100 text-green-700 rounded-full font-medium text-xs hover:bg-green-200 transition"
+                className="px-5 py-2 rounded-full font-medium text-xs transition"
+                style={getAdminRequestStatusBadgeStyle("Approved")}
               >
                 Finalize Documents
               </button>
@@ -1327,7 +1380,10 @@ function ReviewApplications({
 
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-gray-800">Status:</span>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusClass}`}>
+                <span
+                  className="px-2 py-0.5 rounded-full text-xs font-medium"
+                  style={statusBadgeStyle}
+                >
                   {requestStatus}
                 </span>
               </div>
@@ -1482,8 +1538,8 @@ function ReviewApplications({
                   {currentDoc ? currentDoc.fileName : ""}
                 </div>
 
-                <div className="mb-2">
-                  <div className="w-56 relative">
+                <div className="mb-2 flex items-center gap-3">
+                  <div className="w-56 relative shrink-0">
                     <select
                       value={selectedReason}
                       onChange={(event) => setSelectedReason(event.target.value)}
@@ -1498,6 +1554,25 @@ function ReviewApplications({
                       ))}
                     </select>
                     <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
+
+                  <div className="flex gap-2 ml-auto shrink-0">
+                    <button
+                      onClick={handleMarkAsActionRequired}
+                      className="px-4 py-2 text-[#2B2B2B] rounded-full font-semibold text-sm transition disabled:opacity-50 whitespace-nowrap"
+                      style={{ backgroundColor: ADMIN_DOCUMENT_ACCENT_COLORS.actionRequired }}
+                      disabled={readOnly || !currentDoc || isSaving || !selectedReason}
+                    >
+                      {isSaving ? "Saving..." : 'Mark as "Action Required"'}
+                    </button>
+                    <button
+                      onClick={handleApproved}
+                      className="px-4 py-2 text-white rounded-full font-semibold text-sm transition disabled:opacity-50 whitespace-nowrap"
+                      style={{ backgroundColor: ADMIN_DOCUMENT_ACCENT_COLORS.approved }}
+                      disabled={readOnly || !currentDoc || isSaving}
+                    >
+                      {isSaving ? "Saving..." : "Approve"}
+                    </button>
                   </div>
                 </div>
 
@@ -1520,23 +1595,6 @@ function ReviewApplications({
                     {saveError}
                   </div>
                 )}
-
-                <div className="flex gap-3 mt-3 justify-center">
-                  <button
-                    onClick={handleMarkAsActionRequired}
-                    className="px-5 py-2 bg-orange-500 text-white rounded-full font-semibold text-sm hover:bg-orange-600 transition disabled:opacity-50"
-                    disabled={readOnly || !currentDoc || isSaving || !selectedReason}
-                  >
-                    {isSaving ? "Saving..." : 'Mark as "Action Required"'}
-                  </button>
-                  <button
-                    onClick={handleApproved}
-                    className="px-5 py-2 bg-green-500 text-white rounded-full font-semibold text-sm hover:bg-green-600 transition disabled:opacity-50"
-                    disabled={readOnly || !currentDoc || isSaving}
-                  >
-                    {isSaving ? "Saving..." : "Approve"}
-                  </button>
-                </div>
               </div>
             </div>
           </div>
@@ -1720,6 +1778,7 @@ function ReviewApplications({
           documents={documentsList}
           onBack={handleBackToReview}
           onSendBack={handleSendBackToApplicant}
+          onProceedToFinalApproval={handleProceedToFinalApproval}
           disableSendBack={requestStatus === "Action Required"}
           disableSendBackReason="Cannot send back again while this request is still Action Required. Wait for applicant changes before sending back."
           asOverlay

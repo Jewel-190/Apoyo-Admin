@@ -3,6 +3,7 @@
  */
 
 import { supabase } from "../lib/supabaseClient";
+import { invalidateAdminPipelineCaches } from "../lib/requestData";
 
 /**
  * @typedef {Object} ListRequestsParams
@@ -57,4 +58,5 @@ export async function updateRequestRow({ serviceId, requestId, patch }) {
   }
   const { error } = await q;
   if (error) throw error;
+  invalidateAdminPipelineCaches();
 }

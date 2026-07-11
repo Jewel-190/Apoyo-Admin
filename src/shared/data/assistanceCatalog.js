@@ -3,50 +3,29 @@
  * for ContentManagement / future mobile config consumers.
  */
 
-import { supabase } from "../lib/supabaseClient.js";
-
-const CATALOG_SELECT = `
-  slug,
-  label,
-  headline,
-  sort_order,
-  active,
-  assistance_services (
-    id,
-    display_name,
-    description_html,
-    mobile_image_url,
-    sort_order,
-    active,
-    assistance_requirements (
-      slot_key,
-      title,
-      sort_order,
-      assistance_requirement_tips (
-        title,
-        description,
-        sort_order
-      )
-    )
-  )
-`;
-
-function sortBySortOrder(rows) {
-  return [...(rows ?? [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-}
+import {
+  CATALOG_SELECT,
+  fetchStitchedAssistanceCatalog,
+  sortCatalogRows,
+} from "../lib/catalogFetch.js";
+import { formatAssistanceLineTitle, normalizeAssistanceName } from "../lib/assistanceCategoryDisplay.js";
 
 /**
  * @returns {Promise<{ data: unknown, error: Error | null }>}
  */
 export async function fetchAssistanceCatalogRows({ includeInactive = false } = {}) {
-  let q = supabase.from("assistance_categories").select(CATALOG_SELECT).order("sort_order", { ascending: true });
-
-  if (!includeInactive) {
-    q = q.eq("active", true);
+  try {
+    const data = await fetchStitchedAssistanceCatalog({
+      includeInactiveCategories: includeInactive,
+      filterActiveServices: !includeInactive,
+      categoriesSelect: CATALOG_SELECT.categoriesMobile,
+      servicesSelect: CATALOG_SELECT.servicesMobile,
+      requirementsSelect: CATALOG_SELECT.requirementsMobile,
+    });
+    return { data, error: null };
+  } catch (error) {
+    return { data: null, error };
   }
-
-  const { data, error } = await q;
-  return { data, error };
 }
 
 /**
@@ -58,15 +37,15 @@ export async function fetchAssistanceCatalogRows({ includeInactive = false } = {
 export function mapCatalogToMobileAssistances(categories, { fallbackImg }) {
   if (!Array.isArray(categories) || categories.length === 0) return [];
 
-  return sortBySortOrder(categories)
+  return sortCatalogRows(categories)
     .filter((cat) => cat.active !== false)
     .map((cat) => {
-      const services = sortBySortOrder(cat.assistance_services)
+      const services = sortCatalogRows(cat.assistance_services)
         .filter((svc) => svc.active !== false)
         .map((svc) => {
-          const requirements = sortBySortOrder(svc.assistance_requirements).map((req) => ({
+          const requirements = sortCatalogRows(svc.assistance_requirements).map((req) => ({
             title: req.title ?? "",
-            tips: sortBySortOrder(req.assistance_requirement_tips).map((tip) => ({
+            tips: sortCatalogRows(req.assistance_requirement_tips).map((tip) => ({
               title: tip.title ?? "",
               description: tip.description ?? "",
             })),
@@ -81,10 +60,11 @@ export function mapCatalogToMobileAssistances(categories, { fallbackImg }) {
           };
         });
 
+      const assistanceName = normalizeAssistanceName(cat.assistance_name);
       return {
         id: cat.slug,
-        label: cat.label ?? "",
-        headline: cat.headline ?? "",
+        assistanceName,
+        displayTitle: formatAssistanceLineTitle(assistanceName),
         services,
       };
     });

@@ -3,6 +3,7 @@
  */
 
 import { supabase } from "../lib/supabaseClient";
+import { invalidateAdminPipelineCaches } from "../lib/requestData";
 
 /**
  * @typedef {"insert" | "update" | "delete" | "transition_status"} AdminRequestOp
@@ -28,6 +29,7 @@ export async function adminRequestOp(params) {
     patch,
   });
   if (error) throw error;
+  invalidateAdminPipelineCaches();
   return data;
 }
 

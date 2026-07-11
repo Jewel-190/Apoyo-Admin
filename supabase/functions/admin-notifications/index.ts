@@ -4,15 +4,22 @@ import { jsonResponse, preflight } from "../_shared/cors.ts";
 /**
  * POST /functions/v1/admin-notifications
  *
- * 1) Runs `process_admin_notifications()` (service_role) to upsert rows in
- *    `admin_notification` from `audit_logs` for unified `assistance_requests`,
- *    scoped by assistance category ↔ admin binding.
- * 2) Returns unread counts: full `unread_by_admin` only when the request is
- *    authorized with `ADMIN_NOTIFICATIONS_SECRET` (cron / server). JWT callers
- *    must be in `public.admins` and receive only `unread_count` for themselves.
+ * Janitor / reconciliation only — not the live delivery path.
+ * Live inbox rows are created by `private.enqueue_admin_notification_for_audit`
+ * (audit_logs trigger) and pushed via Supabase Realtime.
+ *
+ * This endpoint runs `process_admin_notifications()` (service_role) to:
+ * 1) Delete stale rows (approved / complete / done, or category mismatch)
+ * 2) Backfill any missed upserts from latest user-initiated audits
+ *
+ * Returns unread counts: full `unread_by_admin` only when authorized with
+ * `ADMIN_NOTIFICATIONS_SECRET` (cron / server). JWT callers must be in
+ * `public.admins` and receive only `unread_count` for themselves.
  *
  * Auth: `Authorization: Bearer <ADMIN_NOTIFICATIONS_SECRET>` when set,
  * otherwise a valid Supabase user JWT (see `_shared/client.ts`).
+ *
+ * Intended callers: admin login, manual Reload, optional scheduled cron.
  */
 Deno.serve(async (req) => {
   const pre = preflight(req);
@@ -83,10 +90,9 @@ Deno.serve(async (req) => {
 
     const { data: admins, error: adminsError } = await supabase
       .from("admins")
-      .select("user_id, role, service_type, category_id")
+      .select("user_id, category_id, is_super_admin")
       .not("user_id", "is", null)
-      .neq("role", "super_admin")
-      .order("role", { ascending: true });
+      .eq("is_super_admin", false);
 
     if (adminsError) {
       throw adminsError;
@@ -105,8 +111,7 @@ Deno.serve(async (req) => {
 
         return {
           user_id: admin.user_id,
-          role: admin.role,
-          service_type: admin.service_type,
+          category_id: admin.category_id,
           unread_count: Number(unreadCount || 0),
         };
       })

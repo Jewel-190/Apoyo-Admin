@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -11,11 +12,6 @@ import {
 import { supabase } from "../lib/supabaseClient";
 import {
   getRoleConfig,
-  isAdminsRoleLinePlaceholder,
-  lineRoleMatchesCatalogAdminKey,
-  normalizeRawRole,
-  normalizeRoleKey,
-  resolveAdminRole,
 } from "../config/roleConfig";
 import {
   buildCatalogRoleConfig,
@@ -23,6 +19,7 @@ import {
   fetchAssistanceCatalogSnapshot,
 } from "../data/adminCatalog";
 import { collectAllowedServiceIds } from "../lib/lineServiceScope";
+import { clearSessionQueryCache } from "../lib/querySessionCache";
 
 const AuthContext = createContext(null);
 
@@ -90,21 +87,15 @@ function normalizeErrorMessage(error, fallback = "Unexpected error") {
   return error.message || error.error_description || fallback;
 }
 
-/** Any row that can be scoped after catalog load (explicit role, pin, or service_type slug). */
+/** Any admin row that can be scoped by final model. */
 function isAdminProfileAllowed(profile) {
   if (!profile) {
     return false;
   }
-  if (normalizeRawRole(profile.role) === "super_admin") {
-    return true;
-  }
-  if (resolveAdminRole(profile)) {
+  if (profile.is_super_admin === true) {
     return true;
   }
   if (profile.category_id) {
-    return true;
-  }
-  if (normalizeRoleKey(profile.service_type)) {
     return true;
   }
   return false;
@@ -118,14 +109,6 @@ async function fetchAdminProfile(userId) {
     .maybeSingle();
 
   return { data, error };
-}
-
-async function fetchServerActiveSessionByEmail(email, candidateSessionId) {
-  return supabase.rpc("is_admin_session_locked", {
-    p_email: email,
-    p_candidate_session_id: candidateSessionId,
-    p_ttl_seconds: SESSION_TTL_SECONDS,
-  });
 }
 
 async function claimServerActiveSession({ userId, email, sessionId }) {
@@ -179,6 +162,7 @@ export function AuthProvider({ children }) {
 
   const clearAuthState = useCallback(() => {
     syncVersionRef.current += 1;
+    clearSessionQueryCache();
     setSession(null);
     setUser(null);
     setAdminProfile(null);
@@ -231,7 +215,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const applySession = useCallback(
-    async (nextSession, eventLabel) => {
+    async (nextSession, eventLabel, { claimLock = true } = {}) => {
       const syncVersion = syncVersionRef.current + 1;
       syncVersionRef.current = syncVersion;
 
@@ -241,7 +225,15 @@ export function AuthProvider({ children }) {
       const nextUser = nextSession?.user ?? null;
       if (!nextUser?.id) {
         clearAuthState();
-        return { profile: null, profileError: null, stale: false };
+        return { profile: null, profileError: null, stale: false, syncVersion };
+      }
+
+      // Prevent cross-account cache bleed when switching users in the same SPA runtime.
+      if (
+        currentSessionUserIdRef.current &&
+        currentSessionUserIdRef.current !== nextUser.id
+      ) {
+        clearSessionQueryCache();
       }
 
       setSession(nextSession);
@@ -250,25 +242,33 @@ export function AuthProvider({ children }) {
       const { data: profile, error: profileError } = await fetchAdminProfile(nextUser.id);
 
       if (!mountedRef.current || syncVersionRef.current !== syncVersion) {
-        return { profile: null, profileError: null, stale: true };
+        return { profile: null, profileError: null, stale: true, syncVersion };
       }
 
       if (profileError) {
         console.warn("Admin profile fetch failed:", normalizeErrorMessage(profileError));
         setAdminProfile(null);
+        setCatalogBootstrapDone(true);
       } else {
         setAdminProfile(profile ?? null);
+        if (profile) {
+          setCatalogSnapshot(null);
+          setCatalogBootstrapDone(false);
+        } else {
+          setCatalogBootstrapDone(true);
+        }
       }
 
       currentSessionUserIdRef.current = nextUser.id;
       isAuthorizedAdminRef.current = isAdminProfileAllowed(profile);
 
-      // Session lock is optional and should never break authentication.
-      if (isAdminProfileAllowed(profile)) {
+      // Soft claim on session restore. The manual sign-in flow handles its own
+      // hard single-session enforcement (see signIn), so it opts out via claimLock.
+      if (claimLock && isAdminProfileAllowed(profile)) {
         void attemptSessionLock(nextSession, syncVersion);
       }
 
-      return { profile: profile ?? null, profileError, stale: false };
+      return { profile: profile ?? null, profileError, stale: false, syncVersion };
     },
     [attemptSessionLock, clearAuthState]
   );
@@ -304,15 +304,17 @@ export function AuthProvider({ children }) {
 
       const normalizedEmail = String(email || "").trim().toLowerCase();
 
-      if (!normalizedEmail.endsWith("@apoyo.gov")) {
-        return {
-          data: null,
-          error: { message: "Use your @apoyo.gov email address." },
-        };
-      }
-
       setSessionLockWarning("");
       isManualSignInFlowRef.current = true;
+
+      const abortSignIn = async (message) => {
+        const { error: localSignOutError } = await supabase.auth.signOut({ scope: "local" });
+        if (localSignOutError) {
+          console.warn("Supabase signOut failed:", normalizeErrorMessage(localSignOutError));
+        }
+        clearAuthState();
+        return { data: null, error: { message } };
+      };
 
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -325,22 +327,39 @@ export function AuthProvider({ children }) {
         }
 
         const activeSession = data?.session ?? null;
-        const result = await applySession(activeSession, "SIGNED_IN");
+        // Skip the soft restore-claim; we enforce a hard single-session claim below.
+        const result = await applySession(activeSession, "SIGNED_IN", { claimLock: false });
 
-        if (!result.stale && !isAdminProfileAllowed(result.profile) && !result.profileError) {
-          const { error: localSignOutError } = await supabase.auth.signOut({ scope: "local" });
+        if (result.stale) {
+          return { data: null, error: null };
+        }
 
-          if (localSignOutError) {
-            console.warn("Supabase signOut failed:", normalizeErrorMessage(localSignOutError));
+        if (!isAdminProfileAllowed(result.profile) && !result.profileError) {
+          return abortSignIn("Account is not authorized for this system.");
+        }
+
+        // Single active session enforcement: block login when another live
+        // session already owns the lock for this account.
+        const authedUserId = data?.user?.id ?? activeSession?.user?.id ?? null;
+        if (authedUserId) {
+          const { data: lockClaimed, error: claimError } = await claimServerActiveSession({
+            userId: authedUserId,
+            email: normalizedEmail,
+            sessionId: tabSessionIdRef.current,
+          });
+
+          if (claimError) {
+            // Fail open if the lock service is unreachable so infra issues
+            // never hard-lock legitimate admins out of the console.
+            console.warn("Session lock claim failed:", normalizeErrorMessage(claimError));
+            lockOwnedRef.current = true;
+          } else if (lockClaimed === false) {
+            return abortSignIn(
+              "This account is already signed in on another device or browser. Sign out there first, then try again."
+            );
+          } else {
+            lockOwnedRef.current = true;
           }
-
-          clearAuthState();
-          return {
-            data: null,
-            error: {
-              message: "Account is not authorized for this system.",
-            },
-          };
         }
 
         clearLastProtectedRoute();
@@ -369,81 +388,27 @@ export function AuthProvider({ children }) {
     [applySession, clearAuthState]
   );
 
-  const checkAccountCurrentlyLoggedIn = useCallback(async (email) => {
-    const normalizedEmail = String(email || "").trim().toLowerCase();
-
-    if (!normalizedEmail) {
-      return false;
-    }
-
-    const { data, error } = await fetchServerActiveSessionByEmail(
-      normalizedEmail,
-      tabSessionIdRef.current
-    );
-
-    if (error) {
-      console.warn("Session lock check failed:", normalizeErrorMessage(error));
-      return false;
-    }
-
-    return Boolean(data);
-  }, []);
-
-  const isAccountCurrentlyLoggedIn = useCallback((email) => {
-    const normalizedEmail = String(email || "").trim().toLowerCase();
-    return Boolean(normalizedEmail);
-  }, []);
-
-  const lineAdminRole = useMemo(() => {
+  // UI scope key only (e.g. "financial_admin"), not an auth source.
+  const adminScopeKey = useMemo(() => {
     if (!adminProfile) {
       return null;
     }
-    const explicit = resolveAdminRole(adminProfile);
-    if (explicit === "super_admin") {
+    if (adminProfile.is_super_admin === true) {
       return "super_admin";
     }
 
     const cats = catalogSnapshot?.categories;
-    let raw =
-      explicit && !isAdminsRoleLinePlaceholder(explicit)
-        ? normalizeRoleKey(explicit)
-        : null;
-
-    if (!raw && cats?.length && adminProfile.category_id) {
+    if (cats?.length && adminProfile.category_id) {
       const c = cats.find((x) => x.id === adminProfile.category_id);
-      raw = c?.admin_role_key ? normalizeRoleKey(c.admin_role_key) : null;
-    }
-
-    if (!raw && cats?.length) {
-      const st = normalizeRoleKey(adminProfile.service_type);
-      if (st) {
-        const bySlug = cats.find((x) => normalizeRoleKey(x.slug) === st);
-        const byRole = cats.find(
-          (x) =>
-            x.admin_role_key &&
-            lineRoleMatchesCatalogAdminKey(adminProfile.service_type, x.admin_role_key)
-        );
-        const c = bySlug || byRole;
-        raw = c?.admin_role_key ? normalizeRoleKey(c.admin_role_key) : null;
+      if (c?.slug) {
+        return `${String(c.slug).trim().toLowerCase()}_admin`;
       }
     }
 
-    if (!raw) {
-      return null;
+    if (adminProfile.category_id) {
+      return "line_admin";
     }
-
-    if (raw !== "super_admin" && cats?.length) {
-      const cat = cats.find(
-        (x) =>
-          x.admin_role_key &&
-          lineRoleMatchesCatalogAdminKey(raw, x.admin_role_key)
-      );
-      if (cat?.admin_role_key) {
-        return normalizeRoleKey(cat.admin_role_key);
-      }
-    }
-
-    return raw;
+    return null;
   }, [adminProfile, catalogSnapshot]);
 
   useEffect(() => {
@@ -597,7 +562,7 @@ export function AuthProvider({ children }) {
     }
 
     // Only maintain server lock heartbeat for admin sessions.
-    if (!lineAdminRole) {
+    if (!adminScopeKey) {
       return;
     }
 
@@ -647,21 +612,31 @@ export function AuthProvider({ children }) {
     return () => {
       window.clearInterval(timerId);
     };
-  }, [lineAdminRole, session, user]);
+  }, [adminScopeKey, session, user]);
+
+  useLayoutEffect(() => {
+    if (!adminProfile) {
+      return;
+    }
+    setCatalogBootstrapDone(false);
+  }, [adminProfile?.user_id, adminProfile?.category_id]);
 
   useEffect(() => {
     let cancelled = false;
 
     if (!adminProfile) {
       setCatalogSnapshot(null);
-      setCatalogBootstrapDone(true);
+      if (!loading) {
+        setCatalogBootstrapDone(true);
+      }
       return;
     }
-    setCatalogBootstrapDone(false);
 
     const loadCatalog = async () => {
       try {
-        const snap = await fetchAssistanceCatalogSnapshot();
+        const snap = await fetchAssistanceCatalogSnapshot({
+          cacheScopeKey: `${user?.id || "anon"}:${adminProfile?.category_id || "all"}`,
+        });
         if (!cancelled) {
           setCatalogSnapshot(snap);
         }
@@ -682,9 +657,9 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [adminProfile]);
+  }, [adminProfile, loading, user?.id]);
 
-  const adminShellReady = useMemo(() => {
+  const workspaceReady = useMemo(() => {
     if (loading) {
       return false;
     }
@@ -694,11 +669,13 @@ export function AuthProvider({ children }) {
     return catalogBootstrapDone;
   }, [loading, adminProfile, catalogBootstrapDone]);
 
+  const adminShellReady = workspaceReady;
+
   const roleConfig = useMemo(() => {
     if (!adminProfile) {
       return getRoleConfig(null);
     }
-    if (lineAdminRole === "super_admin") {
+    if (adminScopeKey === "super_admin") {
       const base = getRoleConfig("super_admin");
       if (!catalogSnapshot) {
         return base;
@@ -716,17 +693,17 @@ export function AuthProvider({ children }) {
         attachmentCatalog: global.attachmentCatalog,
       };
     }
-    if (!lineAdminRole) {
+    if (!adminScopeKey) {
       if (catalogSnapshot) {
         return buildCatalogRoleConfig(adminProfile, null, catalogSnapshot);
       }
       return getRoleConfig(null);
     }
     if (catalogSnapshot) {
-      return buildCatalogRoleConfig(adminProfile, lineAdminRole, catalogSnapshot);
+      return buildCatalogRoleConfig(adminProfile, adminScopeKey, catalogSnapshot);
     }
-    return getRoleConfig(lineAdminRole);
-  }, [lineAdminRole, adminProfile, catalogSnapshot]);
+    return getRoleConfig(adminScopeKey);
+  }, [adminScopeKey, adminProfile, catalogSnapshot]);
 
   const allowedServiceIds = useMemo(
     () => collectAllowedServiceIds(roleConfig),
@@ -735,8 +712,8 @@ export function AuthProvider({ children }) {
 
   const isAuthorizedSuperadmin = useMemo(
     () =>
-      lineAdminRole === "super_admin" && Boolean(session && user && adminProfile),
-    [adminProfile, lineAdminRole, session, user]
+      adminScopeKey === "super_admin" && Boolean(session && user && adminProfile),
+    [adminProfile, adminScopeKey, session, user]
   );
 
   const value = useMemo(
@@ -745,34 +722,33 @@ export function AuthProvider({ children }) {
       user,
       adminProfile,
       catalogSnapshot,
-      adminRole: lineAdminRole,
+      adminScopeKey,
+      adminRole: adminScopeKey,
       roleConfig,
       allowedServiceIds,
       attachmentCatalog: roleConfig?.attachmentCatalog,
       catalogServices: roleConfig?.catalogServices,
       theme: roleConfig?.theme,
       loading,
+      workspaceReady,
       adminShellReady,
       sessionLockWarning,
       signIn,
       signOut,
-      isAccountCurrentlyLoggedIn,
-      checkAccountCurrentlyLoggedIn,
       isAuthenticated: Boolean(session),
       isAuthorizedAdmin:
         Boolean(session && user && adminProfile) &&
         isAdminProfileAllowed(adminProfile) &&
-        normalizeRawRole(adminProfile?.role) !== "super_admin",
+        adminProfile?.is_super_admin !== true,
       isAuthorizedSuperadmin,
     }),
     [
-      lineAdminRole,
+      adminScopeKey,
       allowedServiceIds,
       adminProfile,
-      checkAccountCurrentlyLoggedIn,
-      isAccountCurrentlyLoggedIn,
       isAuthorizedSuperadmin,
       loading,
+      workspaceReady,
       adminShellReady,
       roleConfig,
       catalogSnapshot,

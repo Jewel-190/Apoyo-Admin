@@ -1,24 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, CircleAlert, RefreshCcw } from "lucide-react";
-import { useLocation } from "react-router-dom";
 import MiniNotifications from "../components/MiniNotifications";
 import { useAuth } from "../../shared/context/AuthContext";
 import {
-  fetchAdminNotificationsForAdmin,
-  markAdminNotificationsReadForAssistanceRequest,
-} from "../../shared/lib/adminNotifications";
-import { supabase } from "../../shared/lib/supabaseClient";
-import {
-  buildDisplayName,
-  buildNotificationDescription,
   fetchApplicationsBySources,
-  formatDate,
-  formatRelativeWithTime,
-  normalizeStatus,
+  invalidateAdminPipelineCaches,
   toValidDate,
 } from "../../shared/lib/requestData";
-import ReviewApplications from "./Applications/ReviewApplications";
-import { canAutoTransitionToInProgress } from "../../shared/domain/status";
+import { useAdminNotifications } from "../../shared/context/AdminNotificationContext";
 
 const FILTER_OPTIONS = ["All", "Unread", "Read"];
 
@@ -73,261 +62,100 @@ function groupRowsIntoTimeSections(rows) {
   ].filter((section) => section.rows.length > 0);
 }
 
-function buildApplicationRecord({ row, sourceMeta, userName }) {
-  const submittedAt = row.submitted_at || null;
-  const createdAt = row.created_at || null;
-
-  return {
-    key: `${sourceMeta?.serviceId || row.service_id || "unknown"}-${row.id}`,
-    id: row.request_code || row.id,
-    requestId: row.id,
-    requestCode: row.request_code || row.id,
-    userId: row.user_id || null,
-    name: userName,
-    category: sourceMeta?.category || "Request",
-    date: formatDate(submittedAt || createdAt),
-    submittedAt,
-    createdAt,
-    status: normalizeStatus(row.status),
-    serviceId: row.service_id || sourceMeta?.serviceId || null,
-  };
-}
-
 export default function Notifications() {
-  const { theme, roleConfig, user, allowedServiceIds, adminShellReady } = useAuth();
+  const { theme, roleConfig, adminShellReady } = useAuth();
+  const {
+    inboxNotifications,
+    isLoadingPreview,
+    loadError: inboxLoadError,
+    refreshNotifications,
+    navigateToNotification,
+  } = useAdminNotifications();
 
-  const [notifications, setNotifications] = useState([]);
   const [applicationsByKey, setApplicationsByKey] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingApps, setIsLoadingApps] = useState(true);
+  const [appsError, setAppsError] = useState("");
   const [isOpeningRequest, setIsOpeningRequest] = useState(false);
-  const [loadError, setLoadError] = useState("");
-  const [showReview, setShowReview] = useState(false);
-  const [selectedApplication, setSelectedApplication] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   const notificationsCardRef = useRef(null);
-  const location = useLocation();
 
   const sourceTables = useMemo(
     () => roleConfig?.requestSources || [],
     [roleConfig]
   );
 
-  const sourceServiceLookup = useMemo(() => {
-    const map = {};
-    for (const source of sourceTables) {
-      if (source.serviceId) {
-        map[source.serviceId] = source;
-      }
-    }
-    return map;
-  }, [sourceTables]);
+  // Applications are only for richer labels — inbox itself is live from context.
+  useEffect(() => {
+    let isMounted = true;
 
-  const markNotificationsReadForRequest = useCallback(
-    async (assistanceRequestId) => {
-      if (!assistanceRequestId || !user?.id) {
+    const loadApplications = async () => {
+      if (!adminShellReady) {
+        setIsLoadingApps(true);
         return;
       }
 
-      await markAdminNotificationsReadForAssistanceRequest(user.id, assistanceRequestId);
-    },
-    [user?.id]
-  );
+      setIsLoadingApps(true);
+      setAppsError("");
 
-  const fetchApplicationByNotification = useCallback(async (notification) => {
-    const requestId = notification.request_id;
-    if (!requestId) {
-      throw new Error("Missing request id.");
-    }
-
-    let reqQuery = supabase
-      .from("assistance_requests")
-      .select(
-        "id, request_code, user_id, created_at, submitted_at, status, service_id"
-      )
-      .eq("id", requestId);
-    if (allowedServiceIds.length > 0) {
-      reqQuery = reqQuery.in("service_id", allowedServiceIds);
-    }
-    const { data: requestRow, error: reqErr } = await reqQuery.maybeSingle();
-
-    if (reqErr) {
-      throw reqErr;
-    }
-
-    if (!requestRow) {
-      throw new Error("Request record was not found or is outside your line.");
-    }
-
-    const { data: svcRow } = await supabase
-      .from("assistance_services")
-      .select("id, display_name")
-      .eq("id", requestRow.service_id)
-      .maybeSingle();
-
-    const sourceMeta = {
-      serviceId: requestRow.service_id,
-      category: svcRow?.display_name || "Request",
-    };
-
-    let applicantName = "Unknown Applicant";
-    if (requestRow.user_id) {
-      const { data: userRow } = await supabase
-        .from("users")
-        .select("first_name, middle_name, last_name, suffix")
-        .eq("id", requestRow.user_id)
-        .maybeSingle();
-
-      applicantName = buildDisplayName(userRow);
-    }
-
-    return buildApplicationRecord({
-      row: requestRow,
-      sourceMeta,
-      userName: applicantName,
-    });
-  }, [allowedServiceIds]);
-
-  const loadNotifications = useCallback(async () => {
-    if (!user?.id) {
-      setNotifications([]);
-      setApplicationsByKey({});
-      setIsLoading(false);
-      return;
-    }
-
-    if (!adminShellReady) {
-      setIsLoading(true);
-      return;
-    }
-
-    setIsLoading(true);
-    setLoadError("");
-
-    try {
-      const [rpcRows, appRows] = await Promise.all([
-        fetchAdminNotificationsForAdmin(user.id),
-        sourceTables.length ? fetchApplicationsBySources(sourceTables) : Promise.resolve([]),
-      ]);
-
-      const scopedRows =
-        allowedServiceIds.length > 0
-          ? (rpcRows || []).filter(
-              (row) => row.service_id && allowedServiceIds.includes(row.service_id)
-            )
-          : rpcRows || [];
-
-      const appMap = Object.fromEntries(
-        appRows.map((row) => [String(row.requestId), row])
-      );
-
-      const baseNotifications = scopedRows.map((row) => {
-        const sourceMeta = (row.service_id && sourceServiceLookup[row.service_id]) || {
-          serviceId: row.service_id,
-          category: "Request",
-        };
-        const requestKey = `${row.service_id || "request"}-${row.request_id}`;
-        const linkedApplication = appMap[String(row.request_id)];
-        const category =
-          linkedApplication?.category || sourceMeta.category || "Request";
-        const displayName =
-          linkedApplication?.name || row.applicantName || "Applicant";
-        const eventAt = row.changed_at || row.updated_at || row.created_at;
-
-        return {
-          ...row,
-          requestKey,
-          category,
-          displayName,
-          eventAt,
-          requestCode:
-            linkedApplication?.requestCode ||
-            row.requestCode ||
-            (typeof row.request_id === "string"
-              ? row.request_id.slice(0, 8)
-              : "N/A"),
-          description: buildNotificationDescription(row, category),
-          timeLabel: formatRelativeWithTime(eventAt),
-        };
-      });
-
-      const latestByRequestMap = baseNotifications.reduce((acc, row) => {
-        const key = String(row.request_id);
-        const current = acc[key];
-
-        if (!current) {
-          acc[key] = row;
-          return acc;
+      try {
+        if (!sourceTables.length) {
+          if (isMounted) {
+            setApplicationsByKey({});
+          }
+          return;
         }
 
-        const currentTime = new Date(current.eventAt || 0).getTime();
-        const nextTime = new Date(row.eventAt || 0).getTime();
-
-        if (nextTime >= currentTime) {
-          acc[key] = row;
-        }
-
-        return acc;
-      }, {});
-
-      const dedupedNotifications = Object.values(latestByRequestMap);
-
-      const filteredNotifications = dedupedNotifications
-        .filter((notification) => {
-          const linkedApplication = appMap[String(notification.request_id)];
-          const statusLabel = linkedApplication
-            ? linkedApplication.status
-            : normalizeStatus(notification.requestStatus);
-
-          if (statusLabel === "Approved") {
-            return false;
-          }
-
-          if (statusLabel === "Draft") {
-            return false;
-          }
-
-          return true;
-        })
-        .map((notification) => {
-          const linkedApplication = appMap[String(notification.request_id)];
-          if (linkedApplication) {
-            return notification;
-          }
-
-          return {
-            ...notification,
-            displayName: notification.applicantName || notification.displayName || "Applicant",
-            requestCode:
-              notification.requestCode ||
-              (typeof notification.request_id === "string"
-                ? notification.request_id.slice(0, 8)
-                : "N/A"),
-            category: notification.assistanceCategoryName || notification.category || "Request",
-          };
-        })
-        .sort((a, b) => {
-          const aTime = new Date(a.eventAt || 0).getTime();
-          const bTime = new Date(b.eventAt || 0).getTime();
-          return bTime - aTime;
+        const appRows = await fetchApplicationsBySources(sourceTables, {
+          forceRefresh: reloadKey > 0,
         });
 
-      setApplicationsByKey(appMap);
-      setNotifications(filteredNotifications);
-    } catch (error) {
-      setLoadError(error?.message || "Failed to load notifications.");
-      setNotifications([]);
-      setApplicationsByKey({});
-    } finally {
-      setIsLoading(false);
-    }
-  }, [adminShellReady, allowedServiceIds, sourceServiceLookup, sourceTables, user?.id]);
+        if (!isMounted) {
+          return;
+        }
 
-  useEffect(() => {
-    void loadNotifications();
-  }, [loadNotifications, reloadKey]);
+        setApplicationsByKey(
+          Object.fromEntries(appRows.map((row) => [String(row.requestId), row]))
+        );
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+        setAppsError(error?.message || "Failed to load request details.");
+        setApplicationsByKey({});
+      } finally {
+        if (isMounted) {
+          setIsLoadingApps(false);
+        }
+      }
+    };
+
+    void loadApplications();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [adminShellReady, reloadKey, sourceTables]);
+
+  const notifications = useMemo(() => {
+    return (inboxNotifications || []).map((notification) => {
+      const linked = applicationsByKey[String(notification.request_id)];
+      if (!linked) {
+        return notification;
+      }
+
+      return {
+        ...notification,
+        displayName: linked.name || notification.displayName,
+        requestCode: linked.requestCode || notification.requestCode,
+        category: linked.category || notification.category,
+        statusLabel: linked.status || notification.statusLabel,
+        requestStatus: linked.status || notification.requestStatus,
+      };
+    });
+  }, [applicationsByKey, inboxNotifications]);
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
 
@@ -364,7 +192,8 @@ export default function Notifications() {
   const categoryTimeSections = useMemo(() => {
     const byCat = new Map();
     for (const notification of visibleNotifications) {
-      const label = notification.assistanceCategoryName || "Other";
+      const label =
+        notification.assistanceCategoryName || notification.category || "Other";
       if (!byCat.has(label)) {
         byCat.set(label, []);
       }
@@ -380,123 +209,41 @@ export default function Notifications() {
   }, [visibleNotifications]);
 
   const hasAnyNotification = visibleNotifications.length > 0;
+  const isInitialLoading =
+    isLoadingPreview && inboxNotifications.length === 0 && isLoadingApps;
+  const loadError = inboxLoadError || appsError;
 
-  const openReviewFromNotification = useCallback(
-    async (notification) => {
-      if (!notification?.request_id) {
+  const openRequestFromNotification = useCallback(
+    (notification) => {
+      const requestId = notification?.request_id || notification?.assistance_request_id;
+      if (!requestId) {
         return;
       }
 
       setIsOpeningRequest(true);
-      setLoadError("");
 
       try {
-        if (notification.request_id && user?.id) {
-          await markNotificationsReadForRequest(notification.request_id);
-          setNotifications((previous) =>
-            previous.map((item) =>
-              String(item.request_id) === String(notification.request_id)
-                ? { ...item, is_read: true }
-                : item
-            )
-          );
-        }
-
-        let application =
-          applicationsByKey[String(notification.request_id)] ||
-          (await fetchApplicationByNotification(notification));
-
-        if (application?.serviceId && application?.requestId) {
-          if (canAutoTransitionToInProgress(application.status)) {
-            const updated = { ...application, status: "In Progress" };
-            application = updated;
-
-            setApplicationsByKey((previous) => ({
-              ...previous,
-              [notification.requestKey]: updated,
-            }));
-
-            let upd = supabase
-              .from("assistance_requests")
-              .update({ status: "in progress" })
-              .eq("id", application.requestId);
-            if (allowedServiceIds.length > 0) {
-              upd = upd.in("service_id", allowedServiceIds);
-            }
-            const { error } = await upd;
-
-            if (error) {
-              throw error;
-            }
-          }
-        }
-
-        setSelectedApplication(application);
-        setShowReview(true);
-      } catch (error) {
-        setLoadError(error?.message || "Unable to open request.");
+        const linked = applicationsByKey[String(requestId)];
+        navigateToNotification(
+          linked?.status
+            ? {
+                ...notification,
+                requestStatus: linked.status,
+                statusLabel: linked.status,
+              }
+            : notification
+        );
       } finally {
         setIsOpeningRequest(false);
       }
     },
-    [
-      applicationsByKey,
-      fetchApplicationByNotification,
-      markNotificationsReadForRequest,
-      user?.id,
-      allowedServiceIds,
-    ]
+    [applicationsByKey, navigateToNotification]
   );
-
-  const handleBackToNotifications = () => {
-    setShowReview(false);
-    setSelectedApplication(null);
-    setReloadKey((previous) => previous + 1);
-  };
-
-  useEffect(() => {
-    try {
-      const payload = location?.state?.openNotification;
-      if (!payload) return;
-
-      const match = notifications.find(
-        (n) =>
-          String(n.request_id) === String(payload.request_id)
-      );
-
-      if (match) {
-        void openReviewFromNotification(match);
-        try {
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } catch (replaceStateError) {
-          if (import.meta.env.DEV) {
-            console.warn("Notifications: unable to clear history state", replaceStateError);
-          }
-        }
-      }
-    } catch (openNotificationError) {
-      if (import.meta.env.DEV) {
-        console.warn(
-          "Notifications: unable to auto-open from location state",
-          openNotificationError
-        );
-      }
-    }
-  }, [location?.state, notifications, openReviewFromNotification]);
-
-  if (showReview && selectedApplication) {
-    return (
-      <ReviewApplications
-        onBack={handleBackToNotifications}
-        application={selectedApplication}
-      />
-    );
-  }
 
   const accentColor = theme?.secondary || "var(--apoyo-secondary, #06C1EC)";
 
   return (
-    <div className="min-h-screen">
+    <div className="w-full">
       <div className="flex items-center justify-between mb-6 gap-4">
         <div className="relative w-full max-w-lg">
           <Search
@@ -534,12 +281,19 @@ export default function Notifications() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setReloadKey((previous) => previous + 1)}
+              onClick={() => {
+                invalidateAdminPipelineCaches();
+                setReloadKey((previous) => previous + 1);
+                void refreshNotifications({ runCleanup: true, forceCleanup: true });
+              }}
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60"
-              disabled={isLoading}
+              disabled={isLoadingPreview || isLoadingApps}
             >
-              <RefreshCcw size={14} className={isLoading ? "animate-spin" : ""} />
-              {isLoading ? "Reloading..." : "Reload"}
+              <RefreshCcw
+                size={14}
+                className={isLoadingPreview || isLoadingApps ? "animate-spin" : ""}
+              />
+              {isLoadingPreview || isLoadingApps ? "Reloading..." : "Reload"}
             </button>
 
             <select
@@ -560,15 +314,15 @@ export default function Notifications() {
           </p>
         )}
 
-        {isLoading && (
+        {isInitialLoading && (
           <p className="text-sm text-gray-500">Loading notifications...</p>
         )}
 
-        {!isLoading && !hasAnyNotification && (
+        {!isInitialLoading && !hasAnyNotification && (
           <p className="text-sm text-gray-500">No notifications found.</p>
         )}
 
-        {!isLoading &&
+        {!isInitialLoading &&
           categoryTimeSections.map((categoryBlock) => (
             <div key={categoryBlock.categoryName} className="mb-10 last:mb-0">
               <h2
@@ -579,13 +333,18 @@ export default function Notifications() {
               </h2>
 
               {categoryBlock.sections.map((section) => (
-                <div key={`${categoryBlock.categoryName}-${section.key}`} className="mb-6 last:mb-0">
-                  <h3 className="text-sm font-medium text-gray-600 mb-3">{section.title}</h3>
+                <div
+                  key={`${categoryBlock.categoryName}-${section.key}`}
+                  className="mb-6 last:mb-0"
+                >
+                  <h3 className="text-sm font-medium text-gray-600 mb-3">
+                    {section.title}
+                  </h3>
 
                   <div className="flex flex-col gap-2">
                     {section.rows.map((notification) => (
                       <div
-                        key={notification.id}
+                        key={`${notification.id}-${notification.audit_log_id || ""}`}
                         className="flex items-center gap-4 p-3 rounded-lg border border-gray-200 hover:shadow-sm transition-all duration-200"
                       >
                         <div className="w-5 flex items-center justify-center">
@@ -611,7 +370,7 @@ export default function Notifications() {
 
                         <button
                           type="button"
-                          onClick={() => void openReviewFromNotification(notification)}
+                          onClick={() => openRequestFromNotification(notification)}
                           disabled={isOpeningRequest}
                           className="text-xs font-semibold px-3 py-1.5 rounded-md border border-cyan-200 text-cyan-600 hover:bg-cyan-50 disabled:opacity-60"
                           style={{ color: accentColor }}

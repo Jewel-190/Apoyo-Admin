@@ -1,15 +1,24 @@
 import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import WorkspaceLoadingScreen from "./WorkspaceLoadingScreen";
 
 const LAST_PROTECTED_ROUTE_KEY = "apoyo_admin_last_protected_route";
 
 export default function ProtectedRoute({ children, required = "admin" }) {
-  const { loading, isAuthenticated, isAuthorizedAdmin, isAuthorizedSuperadmin } = useAuth();
+  const {
+    loading,
+    workspaceReady,
+    isAuthenticated,
+    isAuthorizedAdmin,
+    isAuthorizedSuperadmin,
+  } = useAuth();
   const location = useLocation();
 
   const isAuthorized =
     required === "superadmin" ? isAuthorizedSuperadmin : isAuthorizedAdmin;
+  const shouldHoldWorkspace =
+    loading || (isAuthenticated && isAuthorized && !workspaceReady);
 
   useEffect(() => {
     if (!isAuthenticated || !isAuthorized) {
@@ -28,12 +37,8 @@ export default function ProtectedRoute({ children, required = "admin" }) {
     }
   }, [isAuthenticated, isAuthorized, location.hash, location.pathname, location.search]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-gray-500 text-sm">
-        Restoring session...
-      </div>
-    );
+  if (shouldHoldWorkspace) {
+    return <WorkspaceLoadingScreen />;
   }
 
   if (!isAuthenticated || !isAuthorized) {

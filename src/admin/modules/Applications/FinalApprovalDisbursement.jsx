@@ -1,5 +1,6 @@
 import { ChevronLeft, Check } from "lucide-react";
 import { normalizeStatus as normalizeRequestStatus } from "../../../shared/domain/status";
+import { getAdminDocumentResultBadgeStyle } from "../../../shared/lib/adminLineStatusStyles";
 
 const steps = [
   "Pending",
@@ -8,15 +9,6 @@ const steps = [
   "Update Requirements",
   "Approval",
 ];
-
-const DOC_RESULT_BADGE_STYLES = {
-  Approved: "bg-green-100 text-green-700",
-  Verified: "bg-green-100 text-green-700",
-  Pending: "bg-purple-100 text-purple-700",
-  "In Progress": "bg-blue-50 text-blue-400",
-  Resubmitted: "bg-yellow-100 text-yellow-700",
-  "Action Required": "bg-orange-100 text-orange-700",
-};
 
 function getFirstValue(record, fields, fallback = "N/A") {
   if (!record || typeof record !== "object") {
@@ -276,9 +268,8 @@ function FinalApprovalDisbursement({
                     <span className="truncate block">{doc.name}</span>
                   </div>
                   <span
-                    className={`px-3 md:px-4 py-0.5 rounded-full text-[10px] md:text-xs font-semibold shrink-0 ${
-                      DOC_RESULT_BADGE_STYLES[doc.result] || DOC_RESULT_BADGE_STYLES.Pending
-                    }`}
+                    className="px-3 md:px-4 py-0.5 rounded-full text-[10px] md:text-xs font-semibold shrink-0"
+                    style={getAdminDocumentResultBadgeStyle(doc.result)}
                   >
                     {doc.result}
                   </span>

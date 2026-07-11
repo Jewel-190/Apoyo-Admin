@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "../shared/components/ProtectedRoute";
 import SuperadminLayout from "./SuperadminLayout.jsx";
 import { NotificationsPage } from "./modules/notifications/NotificationsPage.jsx";
-import { Reports } from "./modules/Reports/Reports.jsx";
+import { Reports } from "./modules/Reports.jsx";
 import { AuditTrail } from "./modules/AuditTrail.jsx";
 import { User } from "./modules/DataManagement/User.jsx";
 import { Admin } from "./modules/DataManagement/Admin.jsx";

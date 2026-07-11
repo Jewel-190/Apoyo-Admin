@@ -1,6 +1,6 @@
 /**
- * Admin role helpers and loading shells.
- * Service lists, themes, and attachment metadata come from the DB catalog (`adminCatalog.js`).
+ * Admin shell helpers and loading placeholders.
+ * Final access model: `admins.is_super_admin` + `admins.category_id`.
  */
 
 export const ADMIN_ROLES = {
@@ -35,50 +35,45 @@ export function normalizeRoleKey(value) {
 }
 
 /**
- * Match `admins.role` / `service_type` to `assistance_categories.admin_role_key`
- * when one side uses a short key (e.g. financial) and the other financial_admin.
+ * UI helper: treat both `financial` and `financial_admin` as equivalent.
+ * This is intentionally presentation-only and not used for auth decisions.
  */
-export function lineRoleMatchesCatalogAdminKey(lineRaw, categoryAdminRoleKey) {
+export function adminLineMatchesCategorySlug(lineRaw, categorySlug) {
   const line = normalizeRoleKey(lineRaw);
-  const cat = normalizeRoleKey(categoryAdminRoleKey);
-  if (!line || !cat) {
+  const slug = normalizeRoleKey(categorySlug);
+  if (!line || !slug) {
     return false;
   }
-  if (line === cat) {
+  if (line === slug) {
     return true;
   }
-  if (cat === `${line}_admin` || line === `${cat}_admin`) {
+  if (line === `${slug}_admin` || slug === `${line}_admin`) {
     return true;
   }
-  const strip = (k) => k.replace(/_admin$/, "");
-  return strip(line) === strip(cat) && strip(line).length > 0;
+  const stripAdmin = (k) => k.replace(/_admin$/, "");
+  return stripAdmin(line) === slug && slug.length > 0;
 }
 
-/** `public.admins.role` only; service-type → line is resolved in AuthContext using catalog slugs. */
+/** @deprecated Backward-compat alias for older callers. */
+export function lineRoleMatchesCatalogAdminKey(lineRaw, categoryKeyOrSlug) {
+  return adminLineMatchesCategorySlug(lineRaw, categoryKeyOrSlug);
+}
+
+/** @deprecated Legacy no-op shim kept to avoid breaking stale imports. */
 export function resolveAdminRole(adminProfile) {
   if (!adminProfile) {
     return null;
   }
-  const explicit = normalizeRawRole(adminProfile.role);
-  return explicit || null;
+  if (adminProfile.is_super_admin === true) {
+    return "super_admin";
+  }
+  return null;
 }
 
-/**
- * When `admins.role` is a generic placeholder, the real line key and theme must come from
- * `category_id` / `service_type` + `assistance_categories` (see AuthContext `lineAdminRole`).
- */
+/** @deprecated Legacy no-op shim kept to avoid breaking stale imports. */
 export function isAdminsRoleLinePlaceholder(role) {
-  const k = normalizeRawRole(role);
-  if (!k) {
-    return true;
-  }
-  return (
-    k === "admin" ||
-    k === "staff" ||
-    k === "operator" ||
-    k === "line_admin" ||
-    k === "moderator"
-  );
+  void role;
+  return true;
 }
 
 const PLACEHOLDER_LINE = {
@@ -107,9 +102,9 @@ const SUPER_PLACEHOLDER = {
   theme: { ...DEFAULT_SUPER_ADMIN_THEME },
 };
 
-/** Shell used until `buildCatalogRoleConfig` fills from the database. */
-export function getRoleConfig(role) {
-  const key = normalizeRawRole(role);
+/** Shell used until catalog-derived config is available. */
+export function getRoleConfig(scopeKey) {
+  const key = normalizeRawRole(scopeKey);
   if (key === "super_admin") {
     return { ...SUPER_PLACEHOLDER };
   }

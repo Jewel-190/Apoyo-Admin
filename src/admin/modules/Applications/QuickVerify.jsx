@@ -1,4 +1,8 @@
 import { X } from "lucide-react";
+import {
+  ADMIN_DOCUMENT_ACCENT_COLORS,
+  getAdminRequestStatusBadgeStyle,
+} from "../../../shared/lib/adminLineStatusStyles";
 
 function QuickVerify({ application, onClose, onMarkInProgress }) {
   if (!application) return null;
@@ -23,7 +27,10 @@ function QuickVerify({ application, onClose, onMarkInProgress }) {
               </p>
               <div className="flex items-center gap-2">
                 <span className="font-semibold">Status:</span>
-                <span className="px-3 py-1 rounded-full text-sm font-semibold bg-purple-100 text-purple-500 leading-none">
+                <span
+                  className="px-3 py-1 rounded-full text-sm font-semibold leading-none"
+                  style={getAdminRequestStatusBadgeStyle("Pending")}
+                >
                   Pending
                 </span>
               </div>
@@ -56,7 +63,12 @@ function QuickVerify({ application, onClose, onMarkInProgress }) {
                   <div className="h-44 md:h-48 bg-gray-50 flex items-center justify-center p-4">
                     <img src={doc.image} alt={doc.name} className="max-h-full object-contain" />
                   </div>
-                  <div className="bg-lime-500 text-white px-4 py-2 text-sm md:text-base">{doc.name}</div>
+                  <div
+                    className="text-white px-4 py-2 text-sm md:text-base"
+                    style={{ backgroundColor: ADMIN_DOCUMENT_ACCENT_COLORS.approved }}
+                  >
+                    {doc.name}
+                  </div>
                 </div>
               ))}
             </div>

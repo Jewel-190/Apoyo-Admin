@@ -68,9 +68,12 @@ const ADD_MODAL_PANEL_CLASS =
 const PREVIEW_MODAL_PANEL_CLASS =
   "flex h-[min(96vh,960px)] min-h-[min(96vh,960px)] max-h-[96vh] w-full max-w-[min(98vw,1400px)] shrink-0 flex-col overflow-hidden rounded-2xl border border-ocean-200 bg-white shadow-[0_24px_60px_-24px_rgba(10,70,111,0.85)]";
 
-function largeModalOverlayClass(zIndex) {
-  return `fixed inset-0 z-[${zIndex}] overflow-y-auto bg-ocean-950/45 p-4 backdrop-blur-[2px]`;
-}
+const ADD_VOTERS_MODAL_OVERLAY_CLASS =
+  "fixed inset-0 z-[100] overflow-y-auto bg-ocean-950/45 p-4 backdrop-blur-[2px]";
+
+/** Above add-voters (100) and barangay picker (110). */
+const BATCH_PREVIEW_MODAL_OVERLAY_CLASS =
+  "fixed inset-0 z-[130] overflow-y-auto bg-ocean-950/45 p-4 backdrop-blur-[2px]";
 
 const LARGE_MODAL_CENTER_CLASS = "flex min-h-full w-full items-center justify-center";
 
@@ -914,14 +917,13 @@ export function User() {
 
       {addVotersModalOpen ? (
         <div
-          className={largeModalOverlayClass(100)}
+          className={ADD_VOTERS_MODAL_OVERLAY_CLASS}
           role="dialog"
           aria-modal="true"
           aria-labelledby="add-voters-modal-title"
-          onClick={() => !entrySubmitting && !batchParsing && !batchImporting && closeAddVotersModal()}
         >
           <div className={LARGE_MODAL_CENTER_CLASS}>
-            <div className={ADD_MODAL_PANEL_CLASS} onClick={(e) => e.stopPropagation()}>
+            <div className={ADD_MODAL_PANEL_CLASS}>
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-ocean-100 px-5 py-3">
               <div>
                 <h3 id="add-voters-modal-title" className="text-lg font-semibold text-ocean-950">
@@ -1174,15 +1176,14 @@ export function User() {
 
       {batchPreview ? (
         <div
-          className={largeModalOverlayClass(120)}
+          className={BATCH_PREVIEW_MODAL_OVERLAY_CLASS}
           role="dialog"
           aria-modal="true"
           aria-labelledby="batch-import-title"
           aria-busy={batchModalBusy}
-          onClick={() => !batchModalBusy && closeBatchModal()}
         >
           <div className={LARGE_MODAL_CENTER_CLASS}>
-            <div className={PREVIEW_MODAL_PANEL_CLASS} onClick={(e) => e.stopPropagation()}>
+            <div className={PREVIEW_MODAL_PANEL_CLASS}>
             <div className="shrink-0 border-b border-ocean-100 px-5 py-3">
               <h3 id="batch-import-title" className="text-lg font-semibold text-ocean-950">
                 {batchImporting
