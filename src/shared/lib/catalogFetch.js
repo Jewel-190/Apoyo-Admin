@@ -7,6 +7,7 @@
 
 import { supabase as defaultClient } from "./supabaseClient.js";
 import { getSessionCachedQuery, invalidateSessionCacheByPrefix } from "./querySessionCache.js";
+import { cmsCatalogList, cmsServiceDetail } from "./superAdminServicesApi.js";
 
 export const CATALOG_SELECT = {
   categoriesFull: "id,slug,assistance_name,description,sort_order,active,theme_json",
@@ -162,58 +163,26 @@ export function invalidateCmsCatalogListCache() {
 
 /**
  * CMS list payload for Services.jsx — cached for the session to avoid refetch on route remount.
+ * Reads go through super-admin-services-management (superadmin JWT required).
  */
 export async function fetchCmsCatalogList({
-  supabase = defaultClient,
   forceRefresh = false,
 } = {}) {
   return getSessionCachedQuery(
     "cms-catalog-list:active",
-    () =>
-      fetchStitchedAssistanceCatalog({
-        supabase,
-        includeInactiveCategories: false,
-        filterActiveServices: true,
-        categoriesSelect: CATALOG_SELECT.categoriesFull,
-        servicesSelect: CATALOG_SELECT.servicesList,
-        requirementsSelect: null,
-      }),
+    () => cmsCatalogList(),
     { forceRefresh, ttlMs: 120_000 }
   );
 }
 
 /**
  * Fetch one service with full CMS payload (used when opening the edit modal).
+ * Reads go through super-admin-services-management (superadmin JWT required).
  */
-export async function fetchServiceCatalogDetail(serviceId, { supabase = defaultClient } = {}) {
+export async function fetchServiceCatalogDetail(serviceId) {
   const id = String(serviceId ?? "").trim();
   if (!id) {
     throw new Error("Service id is required.");
   }
-
-  const serviceRes = await runQuery("service", () =>
-    supabase.from("assistance_services").select(CATALOG_SELECT.servicesDetail).eq("id", id).maybeSingle()
-  );
-  if (!serviceRes.data) {
-    throw new Error("Service not found.");
-  }
-
-  const requirementsRes = await runQuery("requirements", () =>
-    supabase.from("assistance_requirements").select(CATALOG_SELECT.requirementsDetail).eq("service_id", id)
-  );
-  const requirements = requirementsRes.data ?? [];
-  const requirementIds = requirements.map((row) => row.id).filter(Boolean);
-
-  let tips = [];
-  if (requirementIds.length) {
-    const tipsRes = await runQuery("tips", () =>
-      supabase.from("assistance_requirement_tips").select(CATALOG_SELECT.tips).in("requirement_id", requirementIds)
-    );
-    tips = tipsRes.data ?? [];
-  }
-
-  return {
-    ...serviceRes.data,
-    assistance_requirements: stitchTipsOntoRequirements(requirements, tips),
-  };
+  return cmsServiceDetail(id);
 }

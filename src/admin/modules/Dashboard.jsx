@@ -176,7 +176,7 @@ function PeriodSelect({ value, onChange, accentColor }) {
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="text-xs border border-gray-300 rounded-lg px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-offset-0 bg-white"
+      className="max-w-full shrink-0 text-xs border border-gray-300 rounded-lg px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-offset-0 bg-white"
       style={{ accentColor }}
     >
       {PERIOD_OPTIONS.map((option) => (
@@ -426,7 +426,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="w-full h-full min-h-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-6">
+    <div className="w-full h-full min-h-full min-w-0 overflow-x-hidden bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-6">
         <div className="flex flex-col sm:flex-row items-start justify-between mb-6 gap-2">
           <div>
             <h1
@@ -486,14 +486,14 @@ export default function Dashboard() {
               ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <section className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow duration-300">
-            <div className="flex items-center gap-2 mb-4">
-              <AlertTriangle size={18} className="text-orange-400" />
-              <h3 className="text-sm font-semibold text-gray-700">Follow-ups</h3>
+        <div className="grid grid-cols-1 gap-4 min-w-0 lg:grid-cols-[1fr_1.35fr_1fr]">
+          <section className="min-w-0 overflow-hidden bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow duration-300">
+            <div className="flex items-center gap-2 mb-4 min-w-0">
+              <AlertTriangle size={18} className="text-orange-400 shrink-0" />
+              <h3 className="text-sm font-semibold text-gray-700 truncate">Follow-ups</h3>
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 min-w-0">
               {loadingAnalytics ? (
                 <p className="text-sm text-gray-400">Loading follow-ups...</p>
               ) : followUps.length === 0 ? (
@@ -503,31 +503,36 @@ export default function Dashboard() {
                   const style = getAdminFollowUpRowStyle(item.status);
                   const timeLabel = formatRelativeWithTime(item.changeAt);
                   return (
-                    <div key={item.key} className="flex items-center gap-2.5 min-w-0">
-                      <div
-                        className="w-3 h-3 rounded-full shrink-0"
-                        style={{ backgroundColor: style.dotColor }}
-                      />
-                      <span
-                        className="shrink-0 max-w-[12rem] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-sm font-semibold text-gray-700"
-                        title={item.id}
-                      >
-                        {item.id}
-                      </span>
-                      <span
-                        className="text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap overflow-hidden text-ellipsis min-w-0"
-                        style={{
-                          backgroundColor: style.badgeBg,
-                          color: style.badgeText,
-                        }}
-                        title={`${item.status} | ${timeLabel}`}
-                      >
-                        {item.status} | {timeLabel}
-                      </span>
+                    <div
+                      key={item.key}
+                      className="flex flex-col gap-1.5 min-w-0 sm:flex-row sm:items-center sm:gap-2.5"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div
+                          className="w-3 h-3 rounded-full shrink-0"
+                          style={{ backgroundColor: style.dotColor }}
+                        />
+                        <span
+                          className="min-w-0 truncate font-mono text-sm font-semibold text-gray-700"
+                          title={item.id}
+                        >
+                          {item.id}
+                        </span>
+                        <span
+                          className="max-w-full truncate text-[10px] font-medium px-2 py-0.5 rounded-full shrink min-w-0"
+                          style={{
+                            backgroundColor: style.badgeBg,
+                            color: style.badgeText,
+                          }}
+                          title={`${item.status} | ${timeLabel}`}
+                        >
+                          {item.status} | {timeLabel}
+                        </span>
+                      </div>
                       <button
                         type="button"
                         onClick={() => handleReviewClick(item)}
-                        className="text-xs ml-auto hover:underline transition-colors duration-200 opacity-80 hover:opacity-100 shrink-0"
+                        className="text-xs self-start sm:self-auto sm:ml-auto hover:underline transition-colors duration-200 opacity-80 hover:opacity-100 shrink-0"
                         style={{ color: secondary }}
                       >
                         Review Now
@@ -539,11 +544,11 @@ export default function Dashboard() {
             </div>
           </section>
 
-          <section className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow duration-300">
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <BarChart2 size={16} style={{ color: primary }} />
-                <h3 className="text-sm font-semibold text-gray-700">
+          <section className="min-w-0 overflow-hidden bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow duration-300">
+            <div className="flex flex-col gap-2 mb-1 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <BarChart2 size={16} className="shrink-0" style={{ color: primary }} />
+                <h3 className="text-sm font-semibold text-gray-700 truncate">
                   Status Application Breakdown
                 </h3>
               </div>
@@ -555,47 +560,59 @@ export default function Dashboard() {
             </div>
             <p className="text-[10px] text-gray-400 mb-2 ml-1">Number of applications</p>
 
-            <div className="flex items-end gap-3 h-44 px-1">
-              {loadingAnalytics
-                ? Array.from({ length: 6 }).map((_, index) => (
-                    <div
-                      key={`bar-skeleton-${index}`}
-                      className="flex-1 h-full flex items-end"
-                    >
-                      <div
-                        className="w-full bg-gray-200 rounded-t-xl"
-                        style={{ height: `${18 + index * 9}%` }}
-                      />
-                    </div>
-                  ))
-                : barData.map((bar) => (
-                    <div
-                      key={bar.label}
-                      className="flex flex-col items-center flex-1 h-full justify-end group"
-                    >
-                      <div
-                        className="w-full rounded-t-2xl rounded-b-lg flex items-start justify-center transition-all duration-300 group-hover:opacity-90 relative pt-2"
-                        style={{
-                          height: `${Math.max(6, (bar.value / barMax) * 100)}%`,
-                          backgroundColor: bar.color,
-                          minHeight: "34px",
-                        }}
-                      >
-                        <span className="text-[11px] font-bold text-white">{bar.value}</span>
+            <div className="min-w-0 overflow-x-auto pb-1">
+              <div
+                className="grid w-full min-w-max gap-x-1.5 px-0.5 sm:gap-x-2"
+                style={{
+                  gridTemplateColumns: `repeat(${
+                    loadingAnalytics ? 6 : Math.max(barData.length, 1)
+                  }, minmax(2.75rem, 1fr))`,
+                }}
+              >
+                {loadingAnalytics
+                  ? Array.from({ length: 6 }).map((_, index) => (
+                      <div key={`bar-skeleton-${index}`} className="flex min-w-0 flex-col gap-1.5">
+                        <div className="flex h-36 min-w-0 items-end">
+                          <div
+                            className="w-full rounded-t-xl bg-gray-200"
+                            style={{ height: `${18 + index * 9}%` }}
+                          />
+                        </div>
+                        <div className="h-6 rounded bg-gray-100" />
                       </div>
-                      <span className="text-[10px] text-gray-500 mt-1.5 text-center leading-tight whitespace-nowrap">
-                        {bar.label}
-                      </span>
-                    </div>
-                  ))}
+                    ))
+                  : barData.map((bar) => (
+                      <div
+                        key={bar.label}
+                        className="group flex min-w-0 flex-col gap-1.5"
+                        title={`${bar.label}: ${bar.value}`}
+                      >
+                        <div className="flex h-36 min-w-0 items-end">
+                          <div
+                            className="relative flex w-full items-start justify-center rounded-t-2xl rounded-b-lg pt-2 transition-all duration-300 group-hover:opacity-90"
+                            style={{
+                              height: `${Math.max(6, (bar.value / barMax) * 100)}%`,
+                              backgroundColor: bar.color,
+                              minHeight: "34px",
+                            }}
+                          >
+                            <span className="text-[11px] font-bold text-white">{bar.value}</span>
+                          </div>
+                        </div>
+                        <p className="line-clamp-2 pb-1 text-center text-[10px] leading-tight text-gray-500">
+                          {bar.label}
+                        </p>
+                      </div>
+                    ))}
+              </div>
             </div>
           </section>
 
-          <section className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow duration-300">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <PieChart size={16} style={{ color: primary }} />
-                <h3 className="text-sm font-semibold text-gray-700">Application Distribution</h3>
+          <section className="min-w-0 overflow-hidden bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow duration-300">
+            <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <PieChart size={16} className="shrink-0" style={{ color: primary }} />
+                <h3 className="text-sm font-semibold text-gray-700 truncate">Application Distribution</h3>
               </div>
               <PeriodSelect
                 value={distributionRange}
@@ -605,9 +622,9 @@ export default function Dashboard() {
             </div>
 
             {loadingAnalytics ? (
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
                 <div className="w-36 h-36 bg-gray-100 rounded-full animate-pulse shrink-0" />
-                <div className="flex-1 space-y-3">
+                <div className="w-full flex-1 space-y-3 min-w-0">
                   {Array.from({ length: 4 }).map((_, index) => (
                     <div key={`dist-skeleton-${index}`} className="h-3 rounded bg-gray-200" />
                   ))}
@@ -616,21 +633,21 @@ export default function Dashboard() {
             ) : tableDistributionItems.length === 0 ? (
               <p className="text-xs text-gray-500">No data for selected range.</p>
             ) : (
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
                 <div className="h-36 w-36 shrink-0">
                   <DistributionPie slices={pieSlices} />
                 </div>
-                <div className="flex flex-col gap-2 min-w-0">
+                <div className="flex w-full flex-col gap-2 min-w-0">
                   {pieSlices.map((slice) => (
                     <div key={slice.service_id} className="flex items-center gap-2 min-w-0">
                       <div
                         className="w-3 h-3 rounded-full shrink-0"
                         style={{ backgroundColor: slice.color }}
                       />
-                      <p className="text-xs font-medium text-gray-700 truncate" title={slice.label}>
+                      <p className="text-xs font-medium text-gray-700 truncate min-w-0 flex-1" title={slice.label}>
                         {slice.label}
                       </p>
-                      <p className="text-xs text-gray-500 shrink-0">
+                      <p className="text-xs text-gray-500 shrink-0 tabular-nums">
                         {slice.value} ({slice.pct}%)
                       </p>
                     </div>
@@ -641,7 +658,7 @@ export default function Dashboard() {
           </section>
         </div>
 
-        <section className="mt-4 bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow duration-300">
+        <section className="mt-4 min-w-0 overflow-hidden bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow duration-300">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between mb-4">
             <div>
               <div className="flex items-center gap-2">
@@ -744,70 +761,120 @@ export default function Dashboard() {
             </p>
           ) : null}
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-xs">
-              <thead>
-                <tr className="text-left text-gray-500 border-b border-gray-100">
-                  <th className="py-2 pr-3 font-semibold sticky left-0 bg-white">Service</th>
-                  <th className="py-2 px-2 font-semibold text-right">Applications</th>
-                  {MONITOR_STATUS_COLUMNS.map((status) => (
-                    <th key={status} className="py-2 px-2 font-semibold text-right whitespace-nowrap">
-                      {status}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {loadingAnalytics || loadingCustomMonitor ? (
-                  Array.from({ length: 5 }).map((_, index) => (
-                    <tr key={`monitor-skeleton-${index}`} className="border-b border-gray-50">
-                      <td className="py-2 pr-3 sticky left-0 bg-white">
-                        <div className="h-3 w-44 bg-gray-200 rounded animate-pulse" />
-                      </td>
-                      {Array.from({ length: MONITOR_STATUS_COLUMNS.length + 1 }).map((__, cellIndex) => (
-                        <td key={`monitor-skeleton-cell-${index}-${cellIndex}`} className="py-2 px-2">
-                          <div className="ml-auto h-3 w-8 bg-gray-200 rounded animate-pulse" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : !activeServiceMonitor?.rows?.length ? (
-                  <tr>
-                    <td
-                      colSpan={MONITOR_STATUS_COLUMNS.length + 2}
-                      className="py-4 text-gray-500"
-                    >
-                      No service activity for the selected reporting window.
-                    </td>
-                  </tr>
-                ) : (
-                  activeServiceMonitor.rows.map((row) => (
-                    <tr key={row.service_id} className="border-b border-gray-50 hover:bg-gray-50/60">
-                      <td className="py-2 pr-3 font-medium text-gray-700 sticky left-0 bg-white">
-                        {row.label}
-                      </td>
-                      <td className="py-2 px-2 text-right font-semibold text-gray-800">
-                        {row.applications}
-                      </td>
+          <div className="min-w-0">
+            {/* Narrow: stacked cards so status columns don't force a cramped table */}
+            <div className="space-y-3 md:hidden">
+              {loadingAnalytics || loadingCustomMonitor ? (
+                Array.from({ length: 4 }).map((_, index) => (
+                  <div
+                    key={`monitor-card-skeleton-${index}`}
+                    className="h-28 animate-pulse rounded-xl border border-gray-100 bg-gray-50"
+                  />
+                ))
+              ) : !activeServiceMonitor?.rows?.length ? (
+                <p className="py-2 text-xs text-gray-500">
+                  No service activity for the selected reporting window.
+                </p>
+              ) : (
+                activeServiceMonitor.rows.map((row) => (
+                  <div
+                    key={row.service_id}
+                    className="rounded-xl border border-gray-100 bg-gray-50/60 p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="min-w-0 text-sm font-semibold text-gray-800">{row.label}</p>
+                      <p className="shrink-0 text-xs font-semibold tabular-nums text-gray-700">
+                        {row.applications} apps
+                      </p>
+                    </div>
+                    <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5">
                       {MONITOR_STATUS_COLUMNS.map((status) => {
                         const count = row.statuses?.[status] ?? 0;
                         return (
-                          <td key={`${row.service_id}-${status}`} className="py-2 px-2 text-right">
+                          <div key={`${row.service_id}-${status}`} className="flex items-center justify-between gap-2">
+                            <span className="truncate text-[11px] text-gray-500">{status}</span>
                             <span
-                              className={`inline-flex min-w-[1.5rem] justify-end ${
+                              className={`tabular-nums text-[11px] ${
                                 count > 0 ? "font-medium text-gray-800" : "text-gray-300"
                               }`}
                             >
                               {count}
                             </span>
-                          </td>
+                          </div>
                         );
                       })}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Wider: classic table with sticky service column */}
+            <div className="hidden min-w-0 overflow-x-auto md:block">
+              <table className="w-full min-w-[720px] text-xs">
+                <thead>
+                  <tr className="border-b border-gray-100 text-left text-gray-500">
+                    <th className="sticky left-0 bg-white py-2 pr-3 font-semibold">Service</th>
+                    <th className="px-2 py-2 text-right font-semibold">Applications</th>
+                    {MONITOR_STATUS_COLUMNS.map((status) => (
+                      <th key={status} className="whitespace-nowrap px-2 py-2 text-right font-semibold">
+                        {status}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingAnalytics || loadingCustomMonitor ? (
+                    Array.from({ length: 5 }).map((_, index) => (
+                      <tr key={`monitor-skeleton-${index}`} className="border-b border-gray-50">
+                        <td className="sticky left-0 bg-white py-2 pr-3">
+                          <div className="h-3 w-44 animate-pulse rounded bg-gray-200" />
+                        </td>
+                        {Array.from({ length: MONITOR_STATUS_COLUMNS.length + 1 }).map((__, cellIndex) => (
+                          <td key={`monitor-skeleton-cell-${index}-${cellIndex}`} className="px-2 py-2">
+                            <div className="ml-auto h-3 w-8 animate-pulse rounded bg-gray-200" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : !activeServiceMonitor?.rows?.length ? (
+                    <tr>
+                      <td
+                        colSpan={MONITOR_STATUS_COLUMNS.length + 2}
+                        className="py-4 text-gray-500"
+                      >
+                        No service activity for the selected reporting window.
+                      </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    activeServiceMonitor.rows.map((row) => (
+                      <tr key={row.service_id} className="border-b border-gray-50 hover:bg-gray-50/60">
+                        <td className="sticky left-0 bg-white py-2 pr-3 font-medium text-gray-700">
+                          {row.label}
+                        </td>
+                        <td className="px-2 py-2 text-right font-semibold text-gray-800">
+                          {row.applications}
+                        </td>
+                        {MONITOR_STATUS_COLUMNS.map((status) => {
+                          const count = row.statuses?.[status] ?? 0;
+                          return (
+                            <td key={`${row.service_id}-${status}`} className="px-2 py-2 text-right">
+                              <span
+                                className={`inline-flex min-w-[1.5rem] justify-end ${
+                                  count > 0 ? "font-medium text-gray-800" : "text-gray-300"
+                                }`}
+                              >
+                                {count}
+                              </span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
     </div>

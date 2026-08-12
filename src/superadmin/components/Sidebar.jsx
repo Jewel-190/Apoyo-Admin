@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import appLogo from "../../assets/apoyo1.png";
+import appLogoFallback from "../../assets/apoyo1.png";
+import dasmaLogoFallback from "../../assets/Dasma.png";
+import { BrandChrome } from "../../shared/components/BrandChrome";
 import { useAuth } from "../../shared/context/AuthContext";
 
 const Chevron = ({ open }) => (
@@ -29,7 +31,7 @@ const navTree = [
     kind: "branch",
     children: [
       { path: "/superadmin/content-management/services", label: "Services" },
-      { path: "/superadmin/content-management/information", label: "Information" },
+      { path: "/superadmin/content-management/web", label: "Web" },
     ],
   },
   {
@@ -37,18 +39,18 @@ const navTree = [
     label: "Data management",
     kind: "branch",
     children: [
-      { path: "/superadmin/data-management/user", label: "User" },
-      { path: "/superadmin/data-management/admin", label: "Admin" },
+      { path: "/superadmin/data-management/voters", label: "Voters" },
+      { path: "/superadmin/data-management/users", label: "Users" },
+      { path: "/superadmin/data-management/admins", label: "Admins" },
     ],
   },
   {
     id: "global-settings",
-    label: "Accessibility",
+    label: "Settings",
     kind: "branch",
     children: [
+      { path: "/superadmin/global-settings/service", label: "Service Settings" },
       { path: "/superadmin/global-settings/system", label: "System Settings" },
-      { path: "/superadmin/global-settings/admin", label: "Admin Settings" },
-      { path: "/superadmin/global-settings/user", label: "User Settings" },
     ],
   },
   { path: "/superadmin/audit-trail", label: "Audit trail", kind: "leaf" },
@@ -192,15 +194,13 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
           aria-hidden
         />
         <div className="flex w-full items-center justify-center gap-3">
-          <div className="flex size-11 items-center justify-center rounded-xl border border-white/20 bg-white/10 p-1.5 backdrop-blur-sm">
-            <img src={appLogo} alt="Apoyo logo" className="size-full object-contain" />
-          </div>
-          <div className="text-center">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ocean-200/90">
-              Superadmin
-            </div>
-            <div className="mt-0.5 text-[15px] font-semibold tracking-tight text-white">Apoyo</div>
-          </div>
+          <BrandChrome
+            variant="superadmin-nav"
+            fallbacks={{
+              apoyoLogo: appLogoFallback,
+              dasmaLogo: dasmaLogoFallback,
+            }}
+          />
         </div>
       </div>
 

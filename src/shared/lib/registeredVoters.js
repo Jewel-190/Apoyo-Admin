@@ -1,9 +1,6 @@
 import { supabase } from "./supabaseClient";
 
-const SELECT_COLUMNS =
-  "id, first_name, middle_name, last_name, suffix, age, sex, birth_date, barangay_id, voter_id, created_at, updated_at";
-
-const SELECT_WITH_BARANGAY = `${SELECT_COLUMNS}, barangays ( id, name )`;
+const FUNCTION_NAME = "super-admin-voters-management";
 
 export function buildRegisteredVoterFullName(row) {
   const parts = [
@@ -17,8 +14,12 @@ export function buildRegisteredVoterFullName(row) {
   return parts.join(" ") || "—";
 }
 
+/** Maps a DB row shape if ever needed client-side; primary mapping happens in the edge function. */
 export function mapRegisteredVoterRow(row) {
   if (!row) return null;
+  if (row.firstName != null || row.voterIdNumber != null) {
+    return row;
+  }
   const sexLabel = row.sex === "F" ? "Female" : row.sex === "M" ? "Male" : row.sex;
   const barangayJoin = Array.isArray(row.barangays) ? row.barangays[0] : row.barangays;
   return {
@@ -40,17 +41,20 @@ export function mapRegisteredVoterRow(row) {
   };
 }
 
-export async function fetchRegisteredVoters() {
-  const { data, error } = await supabase
-    .from("registered_voters")
-    .select(SELECT_WITH_BARANGAY)
-    .order("created_at", { ascending: false });
-
+async function invokeVotersManagement(body) {
+  const { data, error } = await supabase.functions.invoke(FUNCTION_NAME, { body });
   if (error) {
-    throw error;
+    throw new Error(error.message || "Voters management request failed.");
   }
+  if (!data?.success) {
+    throw new Error(data?.error || "Voters management request failed.");
+  }
+  return data;
+}
 
-  return (data || []).map(mapRegisteredVoterRow);
+export async function fetchRegisteredVoters() {
+  const data = await invokeVotersManagement({ action: "listRegisteredVoters" });
+  return (data.voters || []).map(mapRegisteredVoterRow);
 }
 
 export async function insertRegisteredVoter({
@@ -64,33 +68,26 @@ export async function insertRegisteredVoter({
   barangayId,
   voterId,
 }) {
-  const payload = {
-    first_name: firstName.trim(),
-    middle_name: (middleName || "").trim(),
-    last_name: lastName.trim(),
-    suffix: (suffix || "").trim(),
-    age: Number(age),
-    sex,
-    birth_date: birthdate,
-    barangay_id: barangayId,
-    voter_id: voterId.trim(),
-  };
-
-  const { data, error } = await supabase
-    .from("registered_voters")
-    .insert(payload)
-    .select(SELECT_WITH_BARANGAY)
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return mapRegisteredVoterRow(data);
+  const data = await invokeVotersManagement({
+    action: "createRegisteredVoter",
+    voter: {
+      firstName,
+      middleName,
+      lastName,
+      suffix,
+      age,
+      sex,
+      birthdate,
+      barangayId,
+      voterId,
+    },
+  });
+  return mapRegisteredVoterRow(data.voter);
 }
 
 /**
  * Inserts many voters sequentially so one duplicate does not abort the whole batch.
+ * Each insert goes through the edge function (same auth/write path as individual create).
  * @param {Array<{ firstName: string, middleName: string, lastName: string, suffix: string, age: string|number, sex: 'M'|'F', birthdate: string, barangayId: string, voterId: string }>} payloads
  * @param {{ onProgress?: (completed: number, total: number) => void }} [options]
  */

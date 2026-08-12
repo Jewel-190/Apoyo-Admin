@@ -12,13 +12,15 @@ import {
   LogOut,
   ChevronDown,
 } from "lucide-react";
-import apoyoLogo from "../../assets/apoyo2.png"; // adjust filename if needed
+import apoyoLogoFallback from "../../assets/apoyo2.png";
+import dasmaLogoFallback from "../../assets/Dasma.png";
+import { BrandChrome } from "../../shared/components/BrandChrome";
 import { useAuth } from "../../shared/context/AuthContext";
 
 const subItems = [
-  { label: "Overview",        to: "/admin/applications/overview" },
+  { label: "Overview", to: "/admin/applications/overview" },
   { label: "Action Required", to: "/admin/applications/action-required" },
-  { label: "Resubmissions",   to: "/admin/applications/resubmissions" },
+  { label: "Resubmissions", to: "/admin/applications/resubmissions" },
 ];
 
 const forApprovalSubItems = [
@@ -138,7 +140,7 @@ function LogoutConfirmModal({
   );
 }
 
-export default function SideNavbar() {
+export default function SideNavbar({ mobileOpen = false, onMobileClose }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut, roleConfig, user } = useAuth();
@@ -190,260 +192,276 @@ export default function SideNavbar() {
     setIsLoggingOut(true);
     try {
       await signOut();
+      onMobileClose?.();
       navigate("/login", { replace: true });
     } finally {
       setIsLoggingOut(false);
       setLogoutConfirmOpen(false);
     }
-  }, [isLoggingOut, navigate, signOut]);
+  }, [isLoggingOut, navigate, onMobileClose, signOut]);
+
+  const closeMobileNav = useCallback(() => {
+    onMobileClose?.();
+  }, [onMobileClose]);
 
   return (
     <>
-    <aside className="fixed top-0 left-0 h-full w-52 bg-white border-r border-gray-100 flex flex-col py-6 px-3 gap-1 z-50">
-      {/* Logo — centered, constrained width for narrow sidebar */}
-      <div className="mb-6 flex w-full shrink-0 justify-center px-2">
-        <img
-          src={apoyoLogo}
-          alt="Apoyo"
-          className="block h-10 max-h-10 w-auto max-w-full object-contain object-center"
-        />
-      </div>
+      <div
+        className={`fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-[2px] transition-opacity duration-200 lg:pointer-events-none lg:hidden ${
+          mobileOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        aria-hidden={!mobileOpen}
+        onClick={closeMobileNav}
+      />
 
-      <div className="px-2 mb-3">
-        <p className="text-[10px] uppercase tracking-wide text-gray-400">Signed in as</p>
-        <p className="text-xs font-semibold" style={{ color: primary }}>
-          {assistanceName}
-          {roleSuffix}
-        </p>
-        {adminEmail ? (
-          <p className="mt-0.5 text-[10px] text-gray-400 font-mono break-all">{adminEmail}</p>
-        ) : null}
-      </div>
-
-      {/* Dashboard */}
-      <NavLink
-        to="/admin/dashboard"
-        className={({ isActive }) =>
-          `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-            isActive ? "text-white shadow-sm" : "text-gray-500 hover:bg-gray-100"
-          }`
-        }
-        style={({ isActive }) =>
-          isActive
-            ? {
-                backgroundImage: `linear-gradient(to right, ${primary}, ${secondary})`,
-              }
-            : undefined
-        }
+      <aside
+        id="admin-navigation-sidebar"
+        className={`fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(100%,13rem)] shrink-0 flex-col border-r border-gray-100 bg-white px-3 py-6 font-sans shadow-[8px_0_40px_-12px_rgba(15,23,42,0.18)] transition-transform duration-200 ease-out lg:w-[var(--admin-sidebar-w,13rem)] lg:translate-x-0 ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+        aria-label="Main navigation"
       >
-        <LayoutDashboard size={17} />
-        Dashboard
-      </NavLink>
-
-      {/* Applications (collapsible) */}
-      <div>
-        <button
-          onClick={() => setAppsOpen((p) => !p)}
-          className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${isAppsRoute ? "text-white shadow-sm" : "text-gray-500 hover:bg-gray-100"}`}
-          style={
-            isAppsRoute
-              ? {
-                  backgroundImage: `linear-gradient(to right, ${primary}, ${secondary})`,
-                }
-              : undefined
-          }
-        >
-          <div className="flex items-center gap-3">
-            <Users size={17} />
-            Applications
-          </div>
-          <ChevronDown
-            size={14}
-            className={`transform transition-transform duration-500 ease-in-out ${
-              appsOpen ? "rotate-180" : "rotate-0"
-            }`}
+        <div className="mb-6 flex w-full shrink-0 justify-center px-2">
+          <BrandChrome
+            variant="admin-nav"
+            fallbacks={{
+              apoyoLogo: apoyoLogoFallback,
+              dasmaLogo: dasmaLogoFallback,
+            }}
           />
-        </button>
-
-        {/* Sub-items (always in DOM so we can animate height/opacity) */}
-        <div
-          className={`ml-3 mt-1 flex flex-col gap-1 relative overflow-hidden transition-all duration-500 ease-in-out ${
-            appsOpen ? "max-h-60 opacity-100" : "max-h-0 opacity-0"
-          }`}
-          aria-hidden={!appsOpen}
-        >
-          {/* vertical connecting line */}
-          <div className="absolute left-[7px] top-0 bottom-0 w-px bg-gray-200" />
-
-          {subItems.map((item) => {
-            const isActive = location.pathname === item.to;
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={`relative flex items-center gap-3 pl-6 pr-2 py-2 rounded-xl text-sm transition-all duration-200 ${
-                  isActive
-                    ? "font-semibold border bg-white"
-                    : "text-gray-400 hover:text-gray-600"
-                }`}
-                style={
-                  isActive
-                    ? {
-                        color: secondary,
-                        borderColor: secondary,
-                      }
-                    : undefined
-                }
-              >
-                {/* dot on the line */}
-                <span
-                  className={`absolute left-[4px] w-2.5 h-2.5 rounded-full border-2 ${
-                    isActive
-                      ? ""
-                      : "bg-white border-gray-300"
-                  }`}
-                  style={
-                    isActive
-                      ? {
-                          backgroundColor: secondary,
-                          borderColor: secondary,
-                        }
-                      : undefined
-                  }
-                />
-                {item.label}
-              </NavLink>
-            );
-          })}
         </div>
-      </div>
 
-      {/* For Approval (collapsible) */}
-      <div>
+        <div className="mb-3 shrink-0 px-2">
+          <p className="text-[10px] uppercase tracking-wide text-gray-400">Signed in as</p>
+          <p className="text-xs font-semibold" style={{ color: primary }}>
+            {assistanceName}
+            {roleSuffix}
+          </p>
+          {adminEmail ? (
+            <p className="mt-0.5 break-all font-mono text-[10px] text-gray-400">{adminEmail}</p>
+          ) : null}
+        </div>
+
+        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+          <NavLink
+            to="/admin/dashboard"
+            onClick={closeMobileNav}
+            className={({ isActive }) =>
+              `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                isActive ? "text-white shadow-sm" : "text-gray-500 hover:bg-gray-100"
+              }`
+            }
+            style={({ isActive }) =>
+              isActive
+                ? {
+                    backgroundImage: `linear-gradient(to right, ${primary}, ${secondary})`,
+                  }
+                : undefined
+            }
+          >
+            <LayoutDashboard size={17} />
+            Dashboard
+          </NavLink>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setAppsOpen((p) => !p)}
+              className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                isAppsRoute ? "text-white shadow-sm" : "text-gray-500 hover:bg-gray-100"
+              }`}
+              style={
+                isAppsRoute
+                  ? {
+                      backgroundImage: `linear-gradient(to right, ${primary}, ${secondary})`,
+                    }
+                  : undefined
+              }
+            >
+              <div className="flex items-center gap-3">
+                <Users size={17} />
+                Applications
+              </div>
+              <ChevronDown
+                size={14}
+                className={`transform transition-transform duration-500 ease-in-out ${
+                  appsOpen ? "rotate-180" : "rotate-0"
+                }`}
+              />
+            </button>
+
+            <div
+              className={`relative ml-3 mt-1 flex flex-col gap-1 overflow-hidden transition-all duration-500 ease-in-out ${
+                appsOpen ? "max-h-60 opacity-100" : "max-h-0 opacity-0"
+              }`}
+              aria-hidden={!appsOpen}
+            >
+              <div className="absolute bottom-0 left-[7px] top-0 w-px bg-gray-200" />
+
+              {subItems.map((item) => {
+                const isActive = location.pathname === item.to;
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={closeMobileNav}
+                    className={`relative flex items-center gap-3 rounded-xl py-2 pl-6 pr-2 text-sm transition-all duration-200 ${
+                      isActive
+                        ? "border bg-white font-semibold"
+                        : "text-gray-400 hover:text-gray-600"
+                    }`}
+                    style={
+                      isActive
+                        ? {
+                            color: secondary,
+                            borderColor: secondary,
+                          }
+                        : undefined
+                    }
+                  >
+                    <span
+                      className={`absolute left-[4px] h-2.5 w-2.5 rounded-full border-2 ${
+                        isActive ? "" : "border-gray-300 bg-white"
+                      }`}
+                      style={
+                        isActive
+                          ? {
+                              backgroundColor: secondary,
+                              borderColor: secondary,
+                            }
+                          : undefined
+                      }
+                    />
+                    {item.label}
+                  </NavLink>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setForApprovalOpen((p) => !p)}
+              className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                isForApprovalRoute ? "text-white shadow-sm" : "text-gray-500 hover:bg-gray-100"
+              }`}
+              style={
+                isForApprovalRoute
+                  ? {
+                      backgroundImage: `linear-gradient(to right, ${primary}, ${secondary})`,
+                    }
+                  : undefined
+              }
+            >
+              <div className="flex items-center gap-3">
+                <Check size={17} strokeWidth={2.5} />
+                For Approval
+              </div>
+              <ChevronDown
+                size={14}
+                className={`transform transition-transform duration-500 ease-in-out ${
+                  forApprovalOpen ? "rotate-180" : "rotate-0"
+                }`}
+              />
+            </button>
+
+            <div
+              className={`relative ml-3 mt-1 flex flex-col gap-1 overflow-hidden transition-all duration-500 ease-in-out ${
+                forApprovalOpen ? "max-h-60 opacity-100" : "max-h-0 opacity-0"
+              }`}
+              aria-hidden={!forApprovalOpen}
+            >
+              <div className="absolute bottom-0 left-[7px] top-0 w-px bg-gray-200" />
+
+              {forApprovalSubItems.map((item) => {
+                const isActive = location.pathname === item.to;
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={closeMobileNav}
+                    className={`relative flex items-center gap-3 rounded-xl py-2 pl-6 pr-2 text-sm transition-all duration-200 ${
+                      isActive
+                        ? "border bg-white font-semibold"
+                        : "text-gray-400 hover:text-gray-600"
+                    }`}
+                    style={
+                      isActive
+                        ? {
+                            color: secondary,
+                            borderColor: secondary,
+                          }
+                        : undefined
+                    }
+                  >
+                    <span
+                      className={`absolute left-[4px] h-2.5 w-2.5 rounded-full border-2 ${
+                        isActive ? "" : "border-gray-300 bg-white"
+                      }`}
+                      style={
+                        isActive
+                          ? {
+                              backgroundColor: secondary,
+                              borderColor: secondary,
+                            }
+                          : undefined
+                      }
+                    />
+                    {item.label}
+                  </NavLink>
+                );
+              })}
+            </div>
+          </div>
+
+          {navItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              onClick={closeMobileNav}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                  isActive ? "text-white shadow-sm" : "text-gray-500 hover:bg-gray-100"
+                }`
+              }
+              style={({ isActive }) =>
+                isActive
+                  ? {
+                      backgroundImage: `linear-gradient(to right, ${primary}, ${tertiary})`,
+                    }
+                  : undefined
+              }
+            >
+              {item.icon}
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+
         <button
           type="button"
-          onClick={() => setForApprovalOpen((p) => !p)}
-          className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${isForApprovalRoute ? "text-white shadow-sm" : "text-gray-500 hover:bg-gray-100"}`}
-          style={
-            isForApprovalRoute
-              ? {
-                  backgroundImage: `linear-gradient(to right, ${primary}, ${secondary})`,
-                }
-              : undefined
-          }
+          onClick={() => setLogoutConfirmOpen(true)}
+          className="mt-2 flex shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500"
         >
-          <div className="flex items-center gap-3">
-            <Check size={17} strokeWidth={2.5} />
-            For Approval
-          </div>
-          <ChevronDown
-            size={14}
-            className={`transform transition-transform duration-500 ease-in-out ${
-              forApprovalOpen ? "rotate-180" : "rotate-0"
-            }`}
-          />
+          <LogOut size={17} />
+          Log Out
         </button>
+      </aside>
 
-        <div
-          className={`ml-3 mt-1 flex flex-col gap-1 relative overflow-hidden transition-all duration-500 ease-in-out ${
-            forApprovalOpen ? "max-h-60 opacity-100" : "max-h-0 opacity-0"
-          }`}
-          aria-hidden={!forApprovalOpen}
-        >
-          <div className="absolute left-[7px] top-0 bottom-0 w-px bg-gray-200" />
-
-          {forApprovalSubItems.map((item) => {
-            const isActive = location.pathname === item.to;
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={`relative flex items-center gap-3 pl-6 pr-2 py-2 rounded-xl text-sm transition-all duration-200 ${
-                  isActive
-                    ? "font-semibold border bg-white"
-                    : "text-gray-400 hover:text-gray-600"
-                }`}
-                style={
-                  isActive
-                    ? {
-                        color: secondary,
-                        borderColor: secondary,
-                      }
-                    : undefined
-                }
-              >
-                <span
-                  className={`absolute left-[4px] w-2.5 h-2.5 rounded-full border-2 ${
-                    isActive ? "" : "bg-white border-gray-300"
-                  }`}
-                  style={
-                    isActive
-                      ? {
-                          backgroundColor: secondary,
-                          borderColor: secondary,
-                        }
-                      : undefined
-                  }
-                />
-                {item.label}
-              </NavLink>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Other nav items */}
-      {navItems.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          className={({ isActive }) =>
-            `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-              isActive
-                ? "text-white shadow-sm"
-                : "text-gray-500 hover:bg-gray-100"
-            }`
+      <LogoutConfirmModal
+        open={logoutConfirmOpen}
+        onCancel={() => {
+          if (!isLoggingOut) {
+            setLogoutConfirmOpen(false);
           }
-          style={({ isActive }) =>
-            isActive
-              ? {
-                  backgroundImage: `linear-gradient(to right, ${primary}, ${tertiary})`,
-                }
-              : undefined
-          }
-        >
-          {item.icon}
-          {item.label}
-        </NavLink>
-      ))}
-
-      {/* Spacer */}
-      <div className="flex-1" />
-
-      {/* Log Out */}
-      <button
-        type="button"
-        onClick={() => setLogoutConfirmOpen(true)}
-        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200"
-      >
-        <LogOut size={17} />
-        Log Out
-      </button>
-    </aside>
-
-    <LogoutConfirmModal
-      open={logoutConfirmOpen}
-      onCancel={() => {
-        if (!isLoggingOut) {
-          setLogoutConfirmOpen(false);
-        }
-      }}
-      onConfirm={handleLogoutConfirm}
-      isLoggingOut={isLoggingOut}
-      primary={primary}
-      secondary={secondary}
-      sessionLabel={sessionLabel}
-    />
+        }}
+        onConfirm={handleLogoutConfirm}
+        isLoggingOut={isLoggingOut}
+        primary={primary}
+        secondary={secondary}
+        sessionLabel={sessionLabel}
+      />
     </>
   );
 }

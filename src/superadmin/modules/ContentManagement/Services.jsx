@@ -1,14 +1,10 @@
 /**
  * Services.jsx — Content Management orchestrator for the assistance catalog.
  *
- * Manipulates the live Supabase catalog (assistance_categories →
- * assistance_services → assistance_requirements → assistance_requirement_tips).
- * Admin-only CMS fields (fonts, web hero/map/office title) live in
- * `assistance_services.cms_metadata` (jsonb). Per-requirement sample docs live in
- * `assistance_requirements.metadata` (jsonb).
- *
- * All write logic is intentionally inlined here so the entire CMS surface is
- * contained in this file + ServiceManagement.jsx + AssistanceManagement.jsx.
+ * UI builds payloads; all catalog reads/writes go through
+ * `super-admin-services-management` (superadmin JWT + service role).
+ * Admin-only CMS fields live in `assistance_services.cms_metadata` (jsonb).
+ * Per-requirement sample docs live in `assistance_requirements.metadata`.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -33,8 +29,10 @@ import {
 } from "./ServiceManagement.jsx";
 import { AssistanceManagement } from "./AssistanceManagement.jsx";
 
-import { supabase } from "../../../shared/lib/supabaseClient.js";
-import { archiveAssistanceService } from "../../../shared/lib/catalogLifecycle.js";
+import {
+  cmsServiceArchive,
+  cmsServiceSave,
+} from "../../../shared/lib/superAdminServicesApi.js";
 import {
   fetchCmsCatalogList,
   fetchServiceCatalogDetail,
@@ -58,14 +56,6 @@ const PencilIcon = () => (
     <path d="m13.5 6.5 4 4" strokeLinecap="round" />
   </svg>
 );
-
-const slugify = (text) =>
-  String(text || "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-+|-+$)/g, "")
-    .slice(0, 64);
 
 function sanitizeRequirementHelpText(value) {
   const raw = String(value ?? "");
@@ -127,13 +117,6 @@ function parseRequirementMetadata(metadata) {
     sampleDocumentImage: meta.sampleDocumentImage || "",
     sampleDocumentName: meta.sampleDocumentName || "",
   };
-}
-
-function buildRequirementMetadata(req) {
-  const image = req?.sampleDocumentImage || "";
-  const name = req?.sampleDocumentName || "";
-  if (!image && !name) return {};
-  return { sampleDocumentImage: image, sampleDocumentName: name };
 }
 
 function buildAdditionalAttachment(svc, attachmentReq) {
@@ -297,251 +280,9 @@ function buildServicePayload({ serviceForm, categoryId, sortOrder }) {
 }
 
 /**
- * Persists the requirements + tips for a service while preserving the existing
- * `slot_key` on rows that were loaded from DB (mobile attachments key off
- * `slot_key`). New requirements get an auto-generated unique slot_key.
- *
- * Strategy:
- *  - UPDATE existing requirements (matched by `_id`) → keeps slot_key stable.
- *  - INSERT new requirements (no `_id`) with a fresh derived slot_key.
- *  - DELETE requirements present in DB but missing from the form (cascade
- *    removes their tips).
- *  - For each surviving requirement, replace tips entirely (tips have no
- *    cross-table FKs, so a wipe+reinsert is safe and simple).
- */
-async function ensureAttachmentSlotMap(serviceId) {
-  const { data: svc, error } = await supabase
-    .from("assistance_services")
-    .select("attachment_slot_map")
-    .eq("id", serviceId)
-    .single();
-  if (error) throw error;
-
-  const { data: requirements, error: reqErr } = await supabase
-    .from("assistance_requirements")
-    .select("slot_key")
-    .eq("service_id", serviceId);
-  if (reqErr) throw reqErr;
-
-  const map =
-    svc?.attachment_slot_map && typeof svc.attachment_slot_map === "object"
-      ? { ...svc.attachment_slot_map }
-      : {};
-
-  let changed = false;
-  for (const row of requirements ?? []) {
-    const slotKey = String(row?.slot_key ?? "").trim();
-    if (!slotKey || map[slotKey]) continue;
-    map[slotKey] = slotKey;
-    changed = true;
-  }
-  if (!map[ADDITIONAL_ATTACHMENT_SLOT]) {
-    map[ADDITIONAL_ATTACHMENT_SLOT] = DEFAULT_ADDITIONAL_ATTACHMENT.fileType;
-    changed = true;
-  }
-  if (!changed) return;
-
-  const { error: updateErr } = await supabase
-    .from("assistance_services")
-    .update({ attachment_slot_map: map })
-    .eq("id", serviceId);
-  if (updateErr) throw updateErr;
-}
-
-async function clearRequirementTips(requirementId) {
-  if (!requirementId) return;
-  const { error } = await supabase
-    .from("assistance_requirement_tips")
-    .delete()
-    .eq("requirement_id", requirementId);
-  if (error) throw error;
-}
-
-/** System “Additional attachment” row — title only, never tips or sample metadata. */
-async function ensureAdditionalAttachmentRequirement(serviceId, additionalAttachment, sortOrder) {
-  const title =
-    additionalAttachment?.title?.trim() || DEFAULT_ADDITIONAL_ATTACHMENT.title;
-
-  const { data: existing, error: fetchErr } = await supabase
-    .from("assistance_requirements")
-    .select("id")
-    .eq("service_id", serviceId)
-    .eq("slot_key", ADDITIONAL_ATTACHMENT_SLOT)
-    .maybeSingle();
-  if (fetchErr) throw fetchErr;
-
-  let requirementId = existing?.id ?? null;
-
-  if (requirementId) {
-    const { error } = await supabase
-      .from("assistance_requirements")
-      .update({
-        title,
-        help: null,
-        sort_order: sortOrder,
-        required: true,
-        metadata: {},
-      })
-      .eq("id", requirementId);
-    if (error) throw error;
-  } else {
-    const { data: inserted, error } = await supabase
-      .from("assistance_requirements")
-      .insert({
-        service_id: serviceId,
-        slot_key: ADDITIONAL_ATTACHMENT_SLOT,
-        title,
-        help: null,
-        sort_order: sortOrder,
-        required: true,
-        metadata: {},
-      })
-      .select("id")
-      .single();
-    if (error) throw error;
-    requirementId = inserted.id;
-  }
-
-  await clearRequirementTips(requirementId);
-  return requirementId;
-}
-
-async function saveRequirementsForService(serviceId, requirements, additionalAttachment) {
-  const cleaned = (requirements || [])
-    .map((req) => ({
-      _id: req?._id ?? null,
-      _slotKey: req?._slotKey ?? null,
-      title: (req?.title ?? "").trim(),
-      help: sanitizeRequirementHelpText(req?.help ?? ""),
-      sampleDocumentImage: req?.sampleDocumentImage || "",
-      sampleDocumentName: req?.sampleDocumentName || "",
-      tips: (req?.tips ?? [])
-        .map((tip) =>
-          typeof tip === "string"
-            ? { title: tip.trim(), description: "" }
-            : { title: (tip?.title ?? "").trim(), description: (tip?.description ?? "").trim() }
-        )
-        .filter((tip) => tip.title),
-    }))
-    .filter((req) => req.title);
-
-  // Existing DB rows for diffing.
-  const { data: existingRows, error: existingErr } = await supabase
-    .from("assistance_requirements")
-    .select("id, slot_key")
-    .eq("service_id", serviceId);
-  if (existingErr) throw existingErr;
-
-  const existingById = new Map((existingRows ?? []).map((r) => [r.id, r]));
-  const submittedIds = new Set(cleaned.map((r) => r._id).filter(Boolean));
-
-  // 1) Delete requirements removed from the form (never delete the system attachment slot).
-  const toDelete = (existingRows ?? [])
-    .filter(
-      (r) =>
-        !submittedIds.has(r.id) && r.slot_key !== ADDITIONAL_ATTACHMENT_SLOT
-    )
-    .map((r) => r.id);
-  if (toDelete.length) {
-    const { error } = await supabase
-      .from("assistance_requirements")
-      .delete()
-      .in("id", toDelete);
-    if (error) throw error;
-  }
-
-  // 2) Pre-compute slot_keys for new requirements while avoiding collision
-  //    with existing slot_keys we're keeping.
-  const reservedSlotKeys = new Set(
-    cleaned
-      .filter((r) => r._id && existingById.has(r._id))
-      .map((r) => r._slotKey)
-      .filter(Boolean)
-  );
-  const reserveSlotKey = (rawTitle, index) => {
-    let base = slugify(rawTitle) || `req-${index + 1}`;
-    if (!reservedSlotKeys.has(base)) {
-      reservedSlotKeys.add(base);
-      return base;
-    }
-    let n = 2;
-    while (reservedSlotKeys.has(`${base}-${n}`)) n += 1;
-    const next = `${base}-${n}`;
-    reservedSlotKeys.add(next);
-    return next;
-  };
-
-  // 3) UPDATE existing + INSERT new. Resolve each requirement's final uuid.
-  const resolvedIds = [];
-  for (let index = 0; index < cleaned.length; index += 1) {
-    const req = cleaned[index];
-    if (req._id && existingById.has(req._id)) {
-      const { error } = await supabase
-        .from("assistance_requirements")
-        .update({
-          title: req.title,
-          help: req.help || null,
-          sort_order: index + 1,
-          metadata: buildRequirementMetadata(req),
-        })
-        .eq("id", req._id);
-      if (error) throw error;
-      resolvedIds.push(req._id);
-    } else {
-      const slotKey = reserveSlotKey(req.title, index);
-      const { data: inserted, error } = await supabase
-        .from("assistance_requirements")
-        .insert({
-          service_id: serviceId,
-          slot_key: slotKey,
-          title: req.title,
-          help: req.help || null,
-          sort_order: index + 1,
-          required: true,
-          metadata: buildRequirementMetadata(req),
-        })
-        .select("id")
-        .single();
-      if (error) throw error;
-      resolvedIds.push(inserted.id);
-    }
-  }
-
-  // 4) Replace tips per requirement (no external FKs depend on tip ids).
-  for (let index = 0; index < cleaned.length; index += 1) {
-    const requirementId = resolvedIds[index];
-    const req = cleaned[index];
-    const { error: tipDelErr } = await supabase
-      .from("assistance_requirement_tips")
-      .delete()
-      .eq("requirement_id", requirementId);
-    if (tipDelErr) throw tipDelErr;
-
-    if (req.tips.length) {
-      const tipRows = req.tips.map((tip, tipIndex) => ({
-        requirement_id: requirementId,
-        title: tip.title,
-        description: tip.description,
-        sort_order: tipIndex + 1,
-      }));
-      const { error: tipInsErr } = await supabase
-        .from("assistance_requirement_tips")
-        .insert(tipRows);
-      if (tipInsErr) throw tipInsErr;
-    }
-  }
-
-  await ensureAttachmentSlotMap(serviceId);
-  await ensureAdditionalAttachmentRequirement(
-    serviceId,
-    additionalAttachment,
-    cleaned.length + 1
-  );
-}
-
-/**
  * Local requirement normalizer that preserves `_id` and `_slotKey` (mobile
- * attachment slots key off `slot_key`).
+ * attachment slots key off `slot_key`). Persistence (requirements/tips/slot map)
+ * runs in super-admin-services-management.
  */
 function normalizeRequirementsPreserveMeta(requirements) {
   const list = (requirements ?? []).map((req) => ({
@@ -561,23 +302,6 @@ function normalizeRequirementsPreserveMeta(requirements) {
         : [{ title: "", description: "" }],
   }));
   return list.length ? list : [{ title: "", help: "", tips: [{ title: "", description: "" }] }];
-}
-
-/** Generate a fresh, unique category slug from a human label. */
-async function generateUniqueCategorySlug(label) {
-  const base = slugify(label) || "category";
-
-  const { data: existing, error } = await supabase
-    .from("assistance_categories")
-    .select("slug")
-    .like("slug", `${base}%`);
-  if (error) throw error;
-
-  const taken = new Set((existing ?? []).map((r) => r.slug));
-  if (!taken.has(base)) return base;
-  let n = 2;
-  while (taken.has(`${base}-${n}`)) n += 1;
-  return `${base}-${n}`;
 }
 
 export function Services() {
@@ -613,7 +337,7 @@ export function Services() {
       if (inFlight) return inFlight;
     }
 
-    const request = fetchServiceCatalogDetail(id, { supabase })
+    const request = fetchServiceCatalogDetail(id)
       .then((detailRow) => {
         const mapped = mapServiceDetailRow(detailRow);
         serviceDetailCacheRef.current.set(id, mapped);
@@ -631,7 +355,7 @@ export function Services() {
     setIsLoading(true);
     setLoadError("");
     try {
-      const nestedRows = await fetchCmsCatalogList({ supabase, forceRefresh });
+      const nestedRows = await fetchCmsCatalogList({ forceRefresh });
 
       const mapped = mapCatalogRows(nestedRows);
       setAssistances(mapped);
@@ -904,37 +628,17 @@ export function Services() {
       });
 
       let serviceId = editingServiceId;
-      if (isUpdate) {
-        const { error } = await withTimeout(
-          supabase.from("assistance_services").update(payload).eq("id", serviceId),
-          "Updating service"
-        );
-        if (error) throw error;
-      } else {
-        const { data: inserted, error } = await withTimeout(
-          supabase
-            .from("assistance_services")
-            .insert({
-              ...payload,
-              request_code_token: slugify(serviceName) || null,
-              attachment_slot_map: { [ADDITIONAL_ATTACHMENT_SLOT]: DEFAULT_ADDITIONAL_ATTACHMENT.fileType },
-            })
-            .select("id")
-            .single(),
-          "Creating service"
-        );
-        if (error) throw error;
-        serviceId = inserted.id;
-      }
-
-      await withTimeout(
-        saveRequirementsForService(
-          serviceId,
-          newService.requirements,
-          newService.additionalAttachment
-        ),
-        "Saving requirements"
+      const saveResult = await withTimeout(
+        cmsServiceSave({
+          serviceId: isUpdate ? serviceId : null,
+          servicePayload: payload,
+          requirements: newService.requirements,
+          additionalAttachment: newService.additionalAttachment,
+        }),
+        isUpdate ? "Updating service" : "Creating service"
       );
+      serviceId = saveResult?.serviceId || serviceId;
+
       await withTimeout(loadCatalog({ forceRefresh: true }), "Refreshing catalog");
       if (serviceId) {
         serviceDetailCacheRef.current.delete(serviceId);
@@ -952,7 +656,7 @@ export function Services() {
     setSaveError("");
     setIsSaving(true);
     try {
-      await archiveAssistanceService(supabase, serviceId);
+      await cmsServiceArchive(serviceId);
       invalidateCmsCatalogListCache();
       await loadCatalog({ forceRefresh: true });
     } catch (err) {

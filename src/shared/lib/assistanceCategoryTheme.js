@@ -178,10 +178,18 @@ export function buildAssistanceCategoryTheme(slug, accentHex) {
 }
 
 export function parseAssistanceCategoryTheme(slug, themeJson) {
-  const parsed =
+  let parsed =
     typeof themeJson === "object" && themeJson !== null && !Array.isArray(themeJson)
       ? themeJson
       : null;
+  if (!parsed && typeof themeJson === "string") {
+    try {
+      const o = JSON.parse(themeJson);
+      if (o && typeof o === "object" && !Array.isArray(o)) parsed = o;
+    } catch {
+      /* ignore */
+    }
+  }
 
   const explicitStripe =
     legacyGradientPair(parsed?.home_card_stripe_gradient) ??

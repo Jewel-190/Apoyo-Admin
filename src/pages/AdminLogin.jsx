@@ -3,9 +3,10 @@
 // ============================================
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import apoyoLogo from "../assets/apoyo1.png";
-import dasmaLogo from "../assets/Dasma.png";
+import apoyoLogoFallback from "../assets/apoyo1.png";
+import dasmaLogoFallback from "../assets/Dasma.png";
 import headphones from "../assets/headphones.png";
+import { BrandChrome } from "../shared/components/BrandChrome";
 import { useAuth } from "../shared/context/AuthContext";
 
 // Client-side brute-force throttle. After MAX_FAILED_ATTEMPTS consecutive
@@ -165,12 +166,13 @@ export default function AdminLogin() {
     <div className="min-h-screen bg-white flex flex-col">
       {/* Header / Logo Bar */}
       <div className="flex items-center gap-3 px-6 md:px-10 py-4 md:py-6">
-        <img src={apoyoLogo} alt="Apoyo Logo" className="h-8 md:h-10 w-auto" />
-        <div className="w-px h-8 md:h-10 bg-gray-300 mx-1" />
-        <img
-          src={dasmaLogo}
-          alt="Dasmarinas Logo"
-          className="h-8 md:h-10 w-auto"
+        <BrandChrome
+          variant="login-header"
+          fallbacks={{
+            apoyoLogo: apoyoLogoFallback,
+            apoyoBanner: apoyoLogoFallback,
+            dasmaLogo: dasmaLogoFallback,
+          }}
         />
       </div>
 

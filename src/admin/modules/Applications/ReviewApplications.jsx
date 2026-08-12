@@ -4,14 +4,12 @@ import {
   ChevronLeft,
   ChevronDown,
   ChevronRight,
-  Minus,
-  Plus,
   FileText,
-  X,
 } from "lucide-react";
 import { supabase } from "../../../shared/lib/supabaseClient";
 import FinalizeDocs from "./FinalizeDocs";
 import FinalApprovalDisbursement from "./FinalApprovalDisbursement";
+import DocumentImageLightbox from "../../components/DocumentImageLightbox";
 import { ASSISTANCE_REQUESTS_TABLE } from "../../../shared/lib/assistanceRequestsTable";
 import {
   attachmentHierarchyRank,
@@ -48,9 +46,6 @@ const ACTION_REASONS = [
   "Name Mismatch",
   "Wrong document",
 ];
-
-const FIT_EXPANDED_ZOOM_LEVEL = 100;
-const EXPANDED_ZOOM_LEVELS = [50, 75, 90, 100, 105, 110, 115, 120, 130, 140, 150, 160, 175, 200];
 
 function knownFieldKeysFromCatalog(catalog) {
   return new Set(Object.keys(catalog?.globalLabels ?? {}));
@@ -645,7 +640,6 @@ function ReviewApplications({
   const [additionalReason, setAdditionalReason] = useState("");
   const [currentDocumentIndex, setCurrentDocumentIndex] = useState(0);
   const [expandedImageDoc, setExpandedImageDoc] = useState(null);
-  const [expandedZoom, setExpandedZoom] = useState(100);
   const [showFinalizeDocs, setShowFinalizeDocs] = useState(false);
   const [showFinalApproval, setShowFinalApproval] = useState(false);
   const [requestData, setRequestData] = useState(null);
@@ -1215,49 +1209,11 @@ function ReviewApplications({
     if (!doc?.imageUrl) {
       return;
     }
-
-    setExpandedZoom(FIT_EXPANDED_ZOOM_LEVEL);
     setExpandedImageDoc(doc);
   };
 
   const closeExpandedImage = () => {
     setExpandedImageDoc(null);
-  };
-
-  const adjustExpandedZoom = (direction) => {
-    setExpandedZoom((prev) => {
-      const currentIndex = EXPANDED_ZOOM_LEVELS.indexOf(prev);
-      if (currentIndex === -1) {
-        return FIT_EXPANDED_ZOOM_LEVEL;
-      }
-
-      if (direction > 0) {
-        const nextIndex = Math.min(
-          currentIndex + 1,
-          EXPANDED_ZOOM_LEVELS.length - 1
-        );
-        return EXPANDED_ZOOM_LEVELS[nextIndex];
-      }
-
-      if (currentIndex === 0) {
-        return EXPANDED_ZOOM_LEVELS[0];
-      }
-
-      return EXPANDED_ZOOM_LEVELS[currentIndex - 1];
-    });
-  };
-
-  const handleExpandedZoomSelect = (value) => {
-    const numericValue = Number(value);
-    if (Number.isNaN(numericValue)) {
-      return;
-    }
-
-    if (!EXPANDED_ZOOM_LEVELS.includes(numericValue)) {
-      return;
-    }
-
-    setExpandedZoom(numericValue);
   };
 
   const requestStatus = normalizeRequestStatus(
@@ -1319,32 +1275,35 @@ function ReviewApplications({
 
   const currentDocResult = currentDoc?.result || "Pending";
   const currentDocResultStyle = getAdminDocumentResultBadgeStyle(currentDocResult);
-  const expandedDocIsPdf = isPdfAttachment(expandedImageDoc);
 
   return (
     <div className="relative w-full max-w-full">
       <div
-        className="h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] md:h-[calc(100dvh-3rem)] md:max-h-[calc(100dvh-3rem)] w-full max-w-full flex min-h-0 flex-col box-border"
+        className="box-border flex h-[calc(100dvh-7.25rem)] max-h-[calc(100dvh-7.25rem)] w-full max-w-full min-h-0 flex-col md:h-[calc(100dvh-3rem)] md:max-h-[calc(100dvh-3rem)]"
         style={{ fontFamily: "'Instrument Sans', sans-serif" }}
       >
         <div
           className="flex min-h-0 flex-1 w-full max-w-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-[0_4px_28px_-10px_rgba(0,139,136,0.22)] ring-1 ring-gray-900/[0.04]"
           style={{ fontFamily: "'Instrument Sans', sans-serif" }}
         >
-          <div className="flex items-center justify-between px-8 py-4 border-b border-gray-200 shrink-0">
-            <div className="flex items-center gap-4">
+          <div className="flex shrink-0 flex-col gap-3 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4 md:px-8">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-4">
               <button
+                type="button"
                 onClick={onBack}
-                className="p-2 text-gray-300 hover:text-gray-500 transition"
+                className="shrink-0 p-2 text-gray-300 transition hover:text-gray-500"
               >
-                <ChevronLeft className="w-6 h-6" />
+                <ChevronLeft className="h-6 w-6" />
               </button>
-              <h1 className="text-3xl font-semibold text-[color:var(--apoyo-primary)]">Review Application</h1>
+              <h1 className="min-w-0 text-xl font-semibold text-[color:var(--apoyo-primary)] sm:text-2xl md:text-3xl">
+                Review Application
+              </h1>
             </div>
             {!readOnly && (
               <button
+                type="button"
                 onClick={handleFinalizeDocs}
-                className="px-5 py-2 rounded-full font-medium text-xs transition"
+                className="self-start rounded-full px-5 py-2 text-xs font-medium transition sm:self-auto"
                 style={getAdminRequestStatusBadgeStyle("Approved")}
               >
                 Finalize Documents
@@ -1359,14 +1318,14 @@ function ReviewApplications({
           )}
 
           {!isLoading && (
-            <div className="flex flex-1 min-h-0 overflow-hidden">
-          <div className="w-1/2 border-r border-gray-200 bg-white min-h-0 flex flex-col overflow-hidden">
-            <div className="px-6 py-3 border-b border-gray-200 bg-white z-10 shrink-0">
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+          <div className="flex w-full min-w-0 shrink-0 flex-col border-b border-gray-200 bg-white lg:min-h-0 lg:w-1/2 lg:shrink lg:flex-1 lg:overflow-hidden lg:border-b-0 lg:border-r">
+            <div className="z-10 shrink-0 border-b border-gray-200 bg-white px-4 py-3 sm:px-6">
               <h2 className="text-sm font-semibold text-gray-800">Details</h2>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              <div className="px-6 py-4 space-y-2">
+            <div className="min-w-0 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+              <div className="space-y-2 px-4 py-4 sm:px-6">
               {loadError && (
                 <div className="bg-red-50 border border-red-200 text-red-600 text-xs px-3 py-2 rounded">
                   {loadError}
@@ -1429,7 +1388,7 @@ function ReviewApplications({
               </div>
               </div>
 
-              <div className="mx-4 mb-2 bg-white border border-gray-300 rounded-lg px-3 py-3 shadow-sm">
+              <div className="mx-3 mb-2 rounded-lg border border-gray-300 bg-white px-3 py-3 shadow-sm sm:mx-4">
                 {hasCoverageField ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
@@ -1524,26 +1483,26 @@ function ReviewApplications({
                 )}
               </div>
 
-              <div className="mx-4 mb-2.5 bg-white border border-gray-300 rounded-lg px-5 py-4 shadow-sm">
-                <div className="flex items-baseline justify-between mb-2">
-                  <h3 className="text-lg font-semibold text-gray-700 min-w-0 pr-3 break-words">
+              <div className="@container mx-3 mb-2.5 rounded-lg border border-gray-300 bg-white px-3 py-4 shadow-sm sm:mx-4 sm:px-5">
+                <div className="mb-2 flex items-baseline justify-between gap-2">
+                  <h3 className="min-w-0 break-words pr-2 text-base font-semibold text-gray-700 sm:text-lg">
                     {currentDoc ? currentDoc.label : "No document available"}
                   </h3>
-                  <span className="text-xs text-gray-500 border border-gray-300 rounded-full px-2 py-0.5 shrink-0">
+                  <span className="shrink-0 rounded-full border border-gray-300 px-2 py-0.5 text-xs text-gray-500">
                     {documentsList.length > 0 ? currentDocumentIndex + 1 : 0} of {documentsList.length}
                   </span>
                 </div>
 
-                <div className="text-[11px] text-gray-400 mb-2 truncate">
+                <div className="mb-2 truncate text-[11px] text-gray-400">
                   {currentDoc ? currentDoc.fileName : ""}
                 </div>
 
-                <div className="mb-2 flex items-center gap-3">
-                  <div className="w-56 relative shrink-0">
+                <div className="mb-2 flex min-w-0 flex-col gap-2 @[34rem]:flex-row @[34rem]:items-center @[34rem]:gap-3">
+                  <div className="relative w-full min-w-0 @[34rem]:w-56 @[34rem]:shrink-0">
                     <select
                       value={selectedReason}
                       onChange={(event) => setSelectedReason(event.target.value)}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg appearance-none bg-white cursor-pointer text-gray-600 text-sm truncate"
+                      className="w-full cursor-pointer appearance-none truncate rounded-lg border border-gray-300 bg-white px-3 py-2.5 pr-9 text-sm text-gray-600"
                       disabled={readOnly || !currentDoc || isSaving}
                     >
                       <option value="">Choose Reason</option>
@@ -1553,21 +1512,23 @@ function ReviewApplications({
                         </option>
                       ))}
                     </select>
-                    <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   </div>
 
-                  <div className="flex gap-2 ml-auto shrink-0">
+                  <div className="flex w-full min-w-0 flex-col gap-2 @[34rem]:ml-auto @[34rem]:w-auto @[34rem]:shrink-0 @[34rem]:flex-row">
                     <button
+                      type="button"
                       onClick={handleMarkAsActionRequired}
-                      className="px-4 py-2 text-[#2B2B2B] rounded-full font-semibold text-sm transition disabled:opacity-50 whitespace-nowrap"
+                      className="w-full min-w-0 rounded-full px-4 py-2 text-sm font-semibold text-[#2B2B2B] transition disabled:opacity-50 @[34rem]:w-auto @[34rem]:whitespace-nowrap"
                       style={{ backgroundColor: ADMIN_DOCUMENT_ACCENT_COLORS.actionRequired }}
                       disabled={readOnly || !currentDoc || isSaving || !selectedReason}
                     >
                       {isSaving ? "Saving..." : 'Mark as "Action Required"'}
                     </button>
                     <button
+                      type="button"
                       onClick={handleApproved}
-                      className="px-4 py-2 text-white rounded-full font-semibold text-sm transition disabled:opacity-50 whitespace-nowrap"
+                      className="w-full min-w-0 rounded-full px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-50 @[34rem]:w-auto @[34rem]:whitespace-nowrap"
                       style={{ backgroundColor: ADMIN_DOCUMENT_ACCENT_COLORS.approved }}
                       disabled={readOnly || !currentDoc || isSaving}
                     >
@@ -1599,33 +1560,33 @@ function ReviewApplications({
             </div>
           </div>
 
-          <div className="w-1/2 bg-gray-100 flex flex-col min-h-0 overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200">
-              <div className="flex items-center gap-3 min-w-0">
+          <div className="flex min-h-[50vh] w-full min-w-0 flex-1 flex-col overflow-hidden bg-gray-100 lg:min-h-0 lg:w-1/2">
+            <div className="flex items-center justify-between gap-2 border-b border-gray-200 bg-white px-4 py-3 sm:px-6 sm:py-4">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 {currentDoc && (
                   <span
-                    className="px-3 py-1 rounded-full text-xs inline-block"
+                    className="inline-block shrink-0 rounded-full px-3 py-1 text-xs"
                     style={currentDocResultStyle}
                   >
                     {currentDocResult}
                   </span>
                 )}
-                <span className="text-sm font-semibold text-gray-800 truncate min-w-0">
+                <span className="min-w-0 truncate text-sm font-semibold text-gray-800">
                   {currentDoc ? currentDoc.label : "No documents"}
                 </span>
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 bg-white flex flex-col overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
               {documentsList.length === 0 && (
-                <div className="h-full flex items-center justify-center text-sm text-gray-500">
+                <div className="flex h-full items-center justify-center px-4 text-center text-sm text-gray-500">
                   No request attachments found for this application.
                 </div>
               )}
 
               {currentDoc && (
                 <>
-                  <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+                  <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
                     <AttachmentPreview
                       doc={currentDoc}
                       onImageClick={(event) => {
@@ -1635,27 +1596,29 @@ function ReviewApplications({
                     />
                   </div>
 
-                  <div className="shrink-0 border-t border-gray-200 px-6 py-3 bg-gray-50 flex items-center justify-between">
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-t border-gray-200 bg-gray-50 px-3 py-3 sm:px-6">
                     <button
+                      type="button"
                       onClick={moveToPreviousDocument}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+                      className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-40 sm:px-3"
                       disabled={currentDocumentIndex === 0}
                     >
-                      <ChevronLeft className="w-4 h-4" />
+                      <ChevronLeft className="h-4 w-4" />
                       Previous
                     </button>
 
-                    <span className="text-xs text-gray-500">
+                    <span className="shrink-0 text-xs text-gray-500">
                       {documentsList.length > 0 ? currentDocumentIndex + 1 : 0} of {documentsList.length}
                     </span>
 
                     <button
+                      type="button"
                       onClick={moveToNextDocument}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+                      className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-40 sm:px-3"
                       disabled={currentDocumentIndex >= documentsList.length - 1}
                     >
                       Next
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
                 </>
@@ -1667,111 +1630,9 @@ function ReviewApplications({
         </div>
       </div>
 
-      {expandedImageDoc && (
-        <div
-          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-1"
-          onClick={closeExpandedImage}
-        >
-          <div
-            className="relative w-[99vw] h-[98vh] bg-black/50 border border-white/20 rounded-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="absolute top-4 left-4 z-10 max-w-[70vw] bg-black/55 border border-white/20 rounded-lg px-3 py-2">
-              <p className="text-sm font-semibold text-white truncate">
-                {expandedImageDoc.label || "Document Preview"}
-              </p>
-              <p className="text-xs text-white/80 truncate mt-0.5">
-                {expandedImageDoc.fileName || "Unknown file name"}
-              </p>
-            </div>
-
-            {!expandedDocIsPdf && (
-              <div className="absolute top-20 left-4 z-10 flex items-center gap-1 bg-black/55 border border-white/20 rounded-lg px-2 py-1.5">
-                <button
-                  onClick={() => adjustExpandedZoom(-1)}
-                  className="p-1 text-white hover:bg-white/10 rounded"
-                  aria-label="Zoom out"
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-
-                <select
-                  value={expandedZoom}
-                  onChange={(event) => handleExpandedZoomSelect(event.target.value)}
-                  className="bg-transparent text-white text-sm border border-white/30 rounded px-2 py-1 outline-none"
-                  aria-label="Select zoom level"
-                >
-                  {[FIT_EXPANDED_ZOOM_LEVEL, ...EXPANDED_ZOOM_LEVELS.filter((level) => level !== FIT_EXPANDED_ZOOM_LEVEL)].map((level) => (
-                    <option key={level} value={level} className="text-black">
-                      {level === FIT_EXPANDED_ZOOM_LEVEL ? "Fit (100%)" : `${level}%`}
-                    </option>
-                  ))}
-                </select>
-
-                <button
-                  onClick={() => adjustExpandedZoom(1)}
-                  className="p-1 text-white hover:bg-white/10 rounded"
-                  aria-label="Zoom in"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-
-            <button
-              onClick={closeExpandedImage}
-              className="absolute top-4 right-4 z-20 p-2 text-white hover:bg-white/10 rounded-full"
-              aria-label="Close fullscreen image"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="w-full h-full overflow-auto relative">
-              {expandedDocIsPdf ? (
-                <div className="absolute inset-0 px-4 pt-20 pb-4">
-                  <iframe
-                    src={`${expandedImageDoc.imageUrl}#toolbar=1&navpanes=0`}
-                    title={expandedImageDoc.label || expandedImageDoc.fileName || "PDF Document"}
-                    className="w-full h-full border border-white/20 rounded-lg bg-white"
-                  />
-                </div>
-              ) : expandedZoom <= FIT_EXPANDED_ZOOM_LEVEL ? (
-                <div className="absolute inset-0 px-6 py-6 flex items-center justify-center">
-                  <img
-                    src={expandedImageDoc.imageUrl}
-                    alt={expandedImageDoc.label || expandedImageDoc.fileName || "Document"}
-                    style={{
-                      display: "block",
-                      width: "auto",
-                      height: "auto",
-                      maxWidth: "100%",
-                      maxHeight: "100%",
-                      transform: `scale(${expandedZoom / 100})`,
-                      transformOrigin: "center center",
-                    }}
-                    className="block object-contain transition-all duration-150"
-                  />
-                </div>
-              ) : (
-                <div className="relative w-max min-w-full min-h-full px-6 py-6">
-                  <img
-                    src={expandedImageDoc.imageUrl}
-                    alt={expandedImageDoc.label || expandedImageDoc.fileName || "Document"}
-                    style={{
-                      display: "block",
-                      width: `${expandedZoom}%`,
-                      maxWidth: "none",
-                      maxHeight: "none",
-                      height: "auto",
-                    }}
-                    className="block origin-top-left transition-all duration-150"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {expandedImageDoc ? (
+        <DocumentImageLightbox doc={expandedImageDoc} onClose={closeExpandedImage} />
+      ) : null}
 
       {showFinalizeDocs && (
         <FinalizeDocs

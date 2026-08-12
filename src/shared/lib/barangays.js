@@ -14,13 +14,18 @@ export const BARANGAY_NAME_ALIASES = new Map(
 );
 
 export async function fetchBarangays() {
-  const { data, error } = await supabase.from("barangays").select("id, name").order("name", { ascending: true });
+  const { data, error } = await supabase.functions.invoke("super-admin-voters-management", {
+    body: { action: "listBarangays" },
+  });
 
   if (error) {
-    throw error;
+    throw new Error(error.message || "Unable to load barangays.");
+  }
+  if (!data?.success) {
+    throw new Error(data?.error || "Unable to load barangays.");
   }
 
-  return (data || []).map((row) => ({
+  return (data.barangays || []).map((row) => ({
     id: row.id,
     name: row.name ?? "",
   }));

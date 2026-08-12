@@ -606,6 +606,21 @@ function buildApprovedDateSearchOrParts(dateRange) {
   ];
 }
 
+/** Inclusive UTC window for Application Date (submitted_at, else created_at). */
+function buildApprovedTimeRangeOrParts(fromIso, toIso) {
+  if (!fromIso || !toIso) {
+    return [];
+  }
+
+  const startIso = quotePostgrestValue(fromIso);
+  const endIso = quotePostgrestValue(toIso);
+
+  return [
+    `and(submitted_at.not.is.null,submitted_at.gte.${startIso},submitted_at.lte.${endIso})`,
+    `and(submitted_at.is.null,created_at.gte.${startIso},created_at.lte.${endIso})`,
+  ];
+}
+
 async function findApplicantUserIdsForSearch(searchTerm) {
   const query = String(searchTerm || "").trim().toLowerCase();
   if (query.length < 2) {
@@ -649,6 +664,7 @@ async function findApplicantUserIdsForSearch(searchTerm) {
 /**
  * Server-paginated Approved queue. Never loads the full approved set into memory.
  * Search matches application ID, applicant name, and application date across the whole dataset.
+ * Optional time presets filter by Application Date (submitted_at, else created_at).
  */
 export async function fetchApprovedApplicationsPage({
   sources = [],
@@ -656,6 +672,7 @@ export async function fetchApprovedApplicationsPage({
   search = "",
   page = 1,
   pageSize = APPROVED_PAGE_SIZE_DEFAULT,
+  timeRange = null,
 } = {}) {
   const sourceList = Array.isArray(sources) ? sources : [];
   const resolved = sourceList.map((source) => ({
@@ -667,7 +684,7 @@ export async function fetchApprovedApplicationsPage({
   ];
 
   if (allServiceIds.length === 0) {
-    return { applications: [], total: 0, page: 1, pageSize };
+    return { applications: [], total: 0, page: 1, pageSize, range: null };
   }
 
   const scopedServiceId = serviceId ? String(serviceId).trim() : null;
@@ -676,7 +693,7 @@ export async function fetchApprovedApplicationsPage({
     : allServiceIds;
 
   if (serviceIds.length === 0) {
-    return { applications: [], total: 0, page: 1, pageSize };
+    return { applications: [], total: 0, page: 1, pageSize, range: null };
   }
 
   const metaByServiceId = Object.fromEntries(
@@ -692,6 +709,16 @@ export async function fetchApprovedApplicationsPage({
     matchingUserIds = await findApplicantUserIdsForSearch(searchTerm);
   }
 
+  const rangeFrom =
+    typeof timeRange?.from === "string" && timeRange.from.trim()
+      ? timeRange.from.trim()
+      : null;
+  const rangeTo =
+    typeof timeRange?.to === "string" && timeRange.to.trim()
+      ? timeRange.to.trim()
+      : null;
+  const timeRangeOrParts = buildApprovedTimeRangeOrParts(rangeFrom, rangeTo);
+
   const buildQuery = () => {
     let nextQuery = supabase
       .from("assistance_requests")
@@ -703,6 +730,10 @@ export async function fetchApprovedApplicationsPage({
       .in("service_id", serviceIds)
       .order("submitted_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
+
+    if (timeRangeOrParts.length > 0) {
+      nextQuery = nextQuery.or(timeRangeOrParts.join(","));
+    }
 
     if (searchTerm) {
       const pattern = quotePostgrestValue(`%${escapeIlikePattern(searchTerm)}%`);
@@ -787,6 +818,13 @@ export async function fetchApprovedApplicationsPage({
     total: Number(count ?? total),
     page: total === 0 ? 1 : safePage,
     pageSize: safePageSize,
+    range: timeRange
+      ? {
+          from: rangeFrom,
+          to: rangeTo,
+          label: timeRange.label || null,
+        }
+      : null,
   };
 }
 

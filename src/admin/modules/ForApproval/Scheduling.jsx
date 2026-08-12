@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Eye, RefreshCcw } from "lucide-react";
+import { Search, RefreshCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import MiniNotifications from "../../components/MiniNotifications";
+import ApplicationsListTable from "../../components/ApplicationsListTable";
 import ApprovalReviewDetails from "./ApprovalReviewDetails";
 import { fetchApplicationsBySources, invalidateAdminPipelineCaches } from "../../../shared/lib/requestData";
 import {
@@ -174,7 +175,7 @@ export default function Scheduling() {
         <MiniNotifications />
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <div className="min-w-0 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6">
         <div className="flex items-start justify-between gap-3 mb-5">
           <h1
             className="text-2xl"
@@ -238,71 +239,18 @@ export default function Scheduling() {
           ))}
         </div>
 
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-500 text-xs font-semibold">
-              <th className="pb-3 pr-4">Application ID</th>
-              <th className="pb-3 pr-4">Applicant Name</th>
-              <th className="pb-3 pr-4">Service Category</th>
-              <th className="pb-3 pr-4">Application Date</th>
-              <th className="pb-3 pr-4">Status</th>
-              <th className="pb-3">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && (
-              <tr>
-                <td colSpan={6} className="py-10 text-center text-gray-400">
-                  Loading applications...
-                </td>
-              </tr>
-            )}
-
-            {!isLoading && loadError && (
-              <tr>
-                <td colSpan={6} className="py-10 text-center text-red-500">
-                  {loadError}
-                </td>
-              </tr>
-            )}
-
-            {!isLoading && !loadError && filtered.length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-10 text-center text-gray-400">
-                  No requests ready for case study scheduling.
-                </td>
-              </tr>
-            )}
-
-            {!isLoading &&
-              !loadError &&
-              filtered.map((row, index) => (
-                <tr
-                  key={row.key}
-                  className={`text-xs ${index % 2 === 0 ? "bg-gray-50" : "bg-white"}`}
-                >
-                  <td className="py-2.5 pr-4 font-semibold text-gray-700 pl-2">{row.id}</td>
-                  <td className="py-2.5 pr-4 text-gray-600">{row.name}</td>
-                  <td className="py-2.5 pr-4 text-gray-600">{row.category}</td>
-                  <td className="py-2.5 pr-4 text-gray-500">{row.date}</td>
-                  <td className="py-2.5 pr-4">
-                    <AdminStatusBadge status={row.status} stylesByStatus={statusBadgeStyles} />
-                  </td>
-                  <td className="py-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedKey(row.key)}
-                      className="flex items-center gap-1 font-semibold hover:underline text-xs"
-                      style={{ color: theme.secondary }}
-                    >
-                      <Eye size={13} />
-                      Review Details
-                    </button>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+        <ApplicationsListTable
+          rows={filtered}
+          isLoading={isLoading}
+          loadError={loadError}
+          emptyMessage="No requests ready for case study scheduling."
+          actionLabel="Review Details"
+          actionColor={theme.secondary}
+          onAction={(row) => setSelectedKey(row.key)}
+          renderStatus={(status) => (
+            <AdminStatusBadge status={status} stylesByStatus={statusBadgeStyles} />
+          )}
+        />
       </div>
     </div>
   );

@@ -239,7 +239,7 @@ function PeriodSelect({ value, onChange, accentColor }) {
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="text-xs rounded-lg border border-ocean-200 bg-white px-2 py-1 text-ocean-800 outline-none focus-visible:ring-2 focus-visible:ring-offset-0"
+      className="max-w-full shrink-0 text-xs rounded-lg border border-ocean-200 bg-white px-2 py-1 text-ocean-800 outline-none focus-visible:ring-2 focus-visible:ring-offset-0"
       style={{ accentColor }}
     >
       {PERIOD_OPTIONS.map((option) => (
@@ -270,8 +270,8 @@ function DistributionPie({ slices }) {
           </g>
         );
       })}
-    </svg>
-  );
+  </svg>
+);
 }
 
 export function DashboardPage() {
@@ -561,7 +561,7 @@ export function DashboardPage() {
     : null;
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full min-w-0 overflow-x-hidden space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1
@@ -620,7 +620,7 @@ export function DashboardPage() {
                   <div className="h-4 bg-ocean-100 rounded w-3/4 mb-3" />
                   <div className="h-10 bg-ocean-100 rounded w-1/2 mb-3" />
                   <div className="h-3 bg-ocean-100 rounded w-2/3" />
-                </div>
+          </div>
               ))
             : applicationStatsCards.map((card) => (
                 <DashboardStatCard
@@ -649,11 +649,11 @@ export function DashboardPage() {
                   <div className="h-4 bg-ocean-100 rounded w-3/4 mb-3" />
                   <div className="h-10 bg-ocean-100 rounded w-1/2 mb-3" />
                   <div className="h-3 bg-ocean-100 rounded w-2/3" />
-                </div>
+        </div>
               ))
             : platformStatsCards.map((card) => (
                 <DashboardStatCard
-                  key={card.title}
+              key={card.title}
                   title={card.title}
                   value={card.value}
                   subtitle={card.subtitle}
@@ -661,20 +661,20 @@ export function DashboardPage() {
                   secondary={secondary}
                   icon={card.icon}
                 />
-              ))}
+          ))}
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <section className="rounded-xl border border-ocean-200/80 bg-white p-4 hover:shadow-md transition-shadow duration-300">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle size={18} className="text-orange-400" />
-            <h3 className="text-sm font-semibold text-ocean-900">Pipeline Backlog</h3>
+      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3 min-w-0">
+        <section className="flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-ocean-200/80 bg-white p-4 hover:shadow-md transition-shadow duration-300">
+          <div className="flex items-center gap-2 mb-4 min-w-0">
+            <AlertTriangle size={18} className="text-orange-400 shrink-0" />
+            <h3 className="text-sm font-semibold text-ocean-900 truncate">Pipeline Backlog</h3>
           </div>
           <p className="mb-3 text-[11px] text-ocean-600">
             Current open workload across all assistance.
           </p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-1">
+          <div className="grid grid-cols-1 gap-2">
             {loadingAnalytics
               ? Array.from({ length: 4 }).map((_, index) => (
                   <div
@@ -688,7 +688,7 @@ export function DashboardPage() {
                   return (
                     <div
                       key={item.key}
-                      className="flex items-center justify-between rounded-xl border border-ocean-100 bg-ocean-50/70 px-3 py-2.5"
+                      className="flex items-center justify-between gap-2 rounded-xl border border-ocean-100 bg-ocean-50/70 px-3 py-2.5 min-w-0"
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <span
@@ -699,18 +699,20 @@ export function DashboardPage() {
                           {item.label}
                         </span>
                       </div>
-                      <span className="text-sm font-semibold text-ocean-950">{count}</span>
+                      <span className="text-sm font-semibold text-ocean-950 shrink-0 tabular-nums">
+                        {count}
+                      </span>
                     </div>
                   );
                 })}
           </div>
         </section>
 
-        <section className="rounded-xl border border-ocean-200/80 bg-white p-4 hover:shadow-md transition-shadow duration-300 lg:col-span-2">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <BarChart2 size={16} style={{ color: primary }} />
-              <h3 className="text-sm font-semibold text-ocean-900">
+        <section className="flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-ocean-200/80 bg-white p-4 hover:shadow-md transition-shadow duration-300 lg:col-span-2">
+          <div className="flex shrink-0 flex-col gap-2 mb-1 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <BarChart2 size={16} className="shrink-0" style={{ color: primary }} />
+              <h3 className="text-sm font-semibold text-ocean-900 truncate">
                 Application Status Breakdown
               </h3>
             </div>
@@ -720,47 +722,65 @@ export function DashboardPage() {
               accentColor={primary}
             />
           </div>
-          <p className="text-[10px] text-ocean-500 mb-2 ml-1">Applications by status</p>
+          <p className="mb-2 ml-1 shrink-0 text-[10px] text-ocean-500">Applications by status</p>
 
-          <div className="flex items-end gap-3 h-44 px-1">
-            {loadingAnalytics
-              ? Array.from({ length: 6 }).map((_, index) => (
-                  <div key={`bar-skeleton-${index}`} className="flex-1 h-full flex items-end">
+          <div className="flex min-h-36 min-w-0 flex-1 flex-col justify-end overflow-x-auto pb-1">
+            <div
+              className="grid h-full min-h-36 w-full min-w-max items-end gap-x-1.5 px-0.5 sm:gap-x-2"
+              style={{
+                gridTemplateColumns: `repeat(${
+                  loadingAnalytics ? 6 : Math.max(barData.length, 1)
+                }, minmax(2.75rem, 1fr))`,
+              }}
+            >
+              {loadingAnalytics
+                ? Array.from({ length: 6 }).map((_, index) => (
                     <div
-                      className="w-full bg-ocean-100 rounded-t-xl"
-                      style={{ height: `${18 + index * 9}%` }}
-                    />
-                  </div>
-                ))
-              : barData.map((bar) => (
-                  <div
-                    key={bar.label}
-                    className="flex flex-col items-center flex-1 h-full justify-end group"
-                  >
-                    <div
-                      className="w-full rounded-t-2xl rounded-b-lg flex items-start justify-center transition-all duration-300 group-hover:opacity-90 relative pt-2"
-                      style={{
-                        height: `${Math.max(6, (bar.value / barMax) * 100)}%`,
-                        backgroundColor: bar.color,
-                        minHeight: "34px",
-                      }}
+                      key={`bar-skeleton-${index}`}
+                      className="flex h-full min-h-36 min-w-0 flex-col gap-1.5"
                     >
-                      <span className="text-[11px] font-bold text-white">{bar.value}</span>
+                      <div className="relative min-h-0 w-full flex-1">
+                        <div
+                          className="absolute inset-x-0 bottom-0 rounded-t-xl bg-ocean-100"
+                          style={{ height: `${18 + index * 9}%` }}
+                        />
+                      </div>
+                      <div className="h-6 shrink-0 rounded bg-ocean-50" />
                     </div>
-                    <span className="text-[10px] text-ocean-600 mt-1.5 text-center leading-tight whitespace-nowrap">
-                      {bar.label}
-                    </span>
-                  </div>
-                ))}
+                  ))
+                : barData.map((bar) => (
+                    <div
+                      key={bar.label}
+                      className="group flex h-full min-h-36 min-w-0 flex-col gap-1.5"
+                      title={`${bar.label}: ${bar.value}`}
+                    >
+                      <div className="relative min-h-0 w-full flex-1">
+                        <div
+                          className="absolute inset-x-0 bottom-0 flex items-start justify-center rounded-t-2xl pt-2 transition-all duration-300 group-hover:opacity-90"
+                          style={{
+                            height: `${Math.max(8, (bar.value / barMax) * 100)}%`,
+                            minHeight: "34px",
+                            backgroundColor: bar.color,
+                          }}
+                        >
+                          <span className="text-[11px] font-bold text-white">{bar.value}</span>
+                        </div>
+                      </div>
+                      <p className="line-clamp-2 shrink-0 pb-1 text-center text-[10px] leading-tight text-ocean-600">
+                        {bar.label}
+                      </p>
+                    </div>
+                  ))}
+            </div>
           </div>
         </section>
       </div>
 
-      <section className="rounded-xl border border-ocean-200/80 bg-white p-4 hover:shadow-md transition-shadow duration-300">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <PieChart size={16} style={{ color: primary }} />
-            <h3 className="text-sm font-semibold text-ocean-900">
+      <section className="min-w-0 overflow-hidden rounded-xl border border-ocean-200/80 bg-white p-4 hover:shadow-md transition-shadow duration-300">
+        <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <PieChart size={16} className="shrink-0" style={{ color: primary }} />
+            <h3 className="text-sm font-semibold text-ocean-900 truncate">
               Applications by Assistance
             </h3>
           </div>
@@ -772,9 +792,9 @@ export function DashboardPage() {
         </div>
 
         {loadingAnalytics ? (
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
             <div className="w-36 h-36 bg-ocean-100 rounded-full animate-pulse shrink-0" />
-            <div className="flex-1 space-y-3">
+            <div className="w-full flex-1 space-y-3 min-w-0">
               {Array.from({ length: 4 }).map((_, index) => (
                 <div key={`dist-skeleton-${index}`} className="h-3 rounded bg-ocean-100" />
               ))}
@@ -783,21 +803,21 @@ export function DashboardPage() {
         ) : tableDistributionItems.length === 0 ? (
           <p className="text-xs text-ocean-600">No application activity for the selected range.</p>
         ) : (
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
             <div className="h-36 w-36 shrink-0">
               <DistributionPie slices={pieSlices} />
             </div>
-            <div className="flex flex-col gap-2 min-w-0">
+            <div className="flex w-full flex-col gap-2 min-w-0">
               {pieSlices.map((slice) => (
                 <div key={slice.category_id} className="flex items-center gap-2 min-w-0">
                   <div
                     className="w-3 h-3 rounded-full shrink-0"
                     style={{ backgroundColor: slice.color }}
                   />
-                  <p className="text-xs font-medium text-ocean-800 truncate" title={slice.label}>
+                  <p className="text-xs font-medium text-ocean-800 truncate min-w-0 flex-1" title={slice.label}>
                     {slice.label}
                   </p>
-                  <p className="text-xs text-ocean-600 shrink-0">
+                  <p className="text-xs text-ocean-600 shrink-0 tabular-nums">
                     {slice.value} ({slice.pct}%)
                   </p>
                 </div>
@@ -807,7 +827,7 @@ export function DashboardPage() {
         )}
       </section>
 
-      <section className="rounded-xl border border-ocean-200/80 bg-white p-4 hover:shadow-md transition-shadow duration-300">
+      <section className="min-w-0 overflow-hidden rounded-xl border border-ocean-200/80 bg-white p-4 hover:shadow-md transition-shadow duration-300">
         <div className="flex items-center gap-2 mb-3">
           <AlertTriangle size={16} className="text-amber-500" />
           <h3 className="text-sm font-semibold text-ocean-900">Highest Backlog Assistance</h3>
@@ -825,38 +845,71 @@ export function DashboardPage() {
         ) : backlogCategories.length === 0 ? (
           <p className="text-sm text-ocean-600">No open backlog across assistance.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-xs">
-              <thead>
-                <tr className="text-left text-ocean-500 border-b border-ocean-100">
-                  <th className="py-2 pr-3 font-semibold">Assistance</th>
-                  <th className="py-2 px-2 font-semibold text-right">Total Backlog</th>
-                  <th className="py-2 px-2 font-semibold text-right">Pending</th>
-                  <th className="py-2 px-2 font-semibold text-right">Action Required</th>
-                  <th className="py-2 px-2 font-semibold text-right">Resubmitted</th>
-                  <th className="py-2 px-2 font-semibold text-right">For Approval</th>
-                </tr>
-              </thead>
-              <tbody>
-                {backlogCategories.map((row) => (
-                  <tr key={row.category_id} className="border-b border-ocean-50 hover:bg-ocean-50/50">
-                    <td className="py-2 pr-3 font-medium text-ocean-800">{row.label}</td>
-                    <td className="py-2 px-2 text-right font-semibold text-ocean-900">
-                      {row.backlog_count}
-                    </td>
-                    <td className="py-2 px-2 text-right text-ocean-700">{row.pending}</td>
-                    <td className="py-2 px-2 text-right text-ocean-700">{row.action_required}</td>
-                    <td className="py-2 px-2 text-right text-ocean-700">{row.resubmitted}</td>
-                    <td className="py-2 px-2 text-right text-ocean-700">{row.for_approval}</td>
+          <div className="min-w-0">
+            <div className="space-y-2 md:hidden">
+              {backlogCategories.map((row) => (
+                <div
+                  key={row.category_id}
+                  className="rounded-xl border border-ocean-100 bg-ocean-50/60 p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 text-sm font-semibold text-ocean-900">{row.label}</p>
+                    <p className="shrink-0 text-xs font-semibold tabular-nums text-ocean-900">
+                      {row.backlog_count} total
+                    </p>
+                  </div>
+                  <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5">
+                    {[
+                      ["Pending", row.pending],
+                      ["Action Required", row.action_required],
+                      ["Resubmitted", row.resubmitted],
+                      ["For Approval", row.for_approval],
+                    ].map(([label, count]) => (
+                      <div key={`${row.category_id}-${label}`} className="flex items-center justify-between gap-2">
+                        <span className="truncate text-[11px] text-ocean-600">{label}</span>
+                        <span className="tabular-nums text-[11px] font-medium text-ocean-800">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden min-w-0 overflow-x-auto md:block">
+              <table className="w-full min-w-[560px] text-xs">
+                <thead>
+                  <tr className="border-b border-ocean-100 text-left text-ocean-500">
+                    <th className="sticky left-0 bg-white py-2 pr-3 font-semibold">Assistance</th>
+                    <th className="px-2 py-2 text-right font-semibold">Total Backlog</th>
+                    <th className="px-2 py-2 text-right font-semibold">Pending</th>
+                    <th className="px-2 py-2 text-right font-semibold">Action Required</th>
+                    <th className="px-2 py-2 text-right font-semibold">Resubmitted</th>
+                    <th className="px-2 py-2 text-right font-semibold">For Approval</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {backlogCategories.map((row) => (
+                    <tr key={row.category_id} className="border-b border-ocean-50 hover:bg-ocean-50/50">
+                      <td className="sticky left-0 bg-white py-2 pr-3 font-medium text-ocean-800">
+                        {row.label}
+                      </td>
+                      <td className="px-2 py-2 text-right font-semibold text-ocean-900">
+                        {row.backlog_count}
+                      </td>
+                      <td className="px-2 py-2 text-right text-ocean-700">{row.pending}</td>
+                      <td className="px-2 py-2 text-right text-ocean-700">{row.action_required}</td>
+                      <td className="px-2 py-2 text-right text-ocean-700">{row.resubmitted}</td>
+                      <td className="px-2 py-2 text-right text-ocean-700">{row.for_approval}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </section>
 
-      <section className="rounded-xl border border-ocean-200/80 bg-white p-4 hover:shadow-md transition-shadow duration-300">
+      <section className="min-w-0 overflow-hidden rounded-xl border border-ocean-200/80 bg-white p-4 hover:shadow-md transition-shadow duration-300">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between mb-4">
           <div>
             <div className="flex items-center gap-2">
@@ -952,7 +1005,7 @@ export function DashboardPage() {
         {customMonitorError ? (
           <div className="mb-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
             {customMonitorError}
-          </div>
+              </div>
         ) : null}
 
         {monitorPreset === "custom" &&
@@ -964,73 +1017,121 @@ export function DashboardPage() {
           </p>
         ) : null}
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-xs">
-            <thead>
-              <tr className="text-left text-ocean-500 border-b border-ocean-100">
-                <th className="py-2 pr-3 font-semibold sticky left-0 bg-white">Assistance</th>
-                <th className="py-2 px-2 font-semibold text-right">Applications</th>
-                {MONITOR_STATUS_COLUMNS.map((status) => (
-                  <th key={status} className="py-2 px-2 font-semibold text-right whitespace-nowrap">
-                    {status}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loadingAnalytics || loadingCustomMonitor ? (
-                Array.from({ length: 5 }).map((_, index) => (
-                  <tr key={`monitor-skeleton-${index}`} className="border-b border-ocean-50">
-                    <td className="py-2 pr-3 sticky left-0 bg-white">
-                      <div className="h-3 w-44 bg-ocean-100 rounded animate-pulse" />
-                    </td>
-                    {Array.from({ length: MONITOR_STATUS_COLUMNS.length + 1 }).map((__, cellIndex) => (
-                      <td key={`monitor-skeleton-cell-${index}-${cellIndex}`} className="py-2 px-2">
-                        <div className="ml-auto h-3 w-8 bg-ocean-100 rounded animate-pulse" />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : !activeCategoryMonitor?.rows?.length ? (
-                <tr>
-                  <td
-                    colSpan={MONITOR_STATUS_COLUMNS.length + 2}
-                    className="py-4 text-ocean-600"
-                  >
-                    No assistance activity for the selected reporting window.
-                  </td>
-                </tr>
-              ) : (
-                activeCategoryMonitor.rows.map((row) => (
-                  <tr
-                    key={row.category_id}
-                    className="border-b border-ocean-50 hover:bg-ocean-50/60"
-                  >
-                    <td className="py-2 pr-3 font-medium text-ocean-800 sticky left-0 bg-white">
-                      {row.label}
-                    </td>
-                    <td className="py-2 px-2 text-right font-semibold text-ocean-900">
-                      {row.applications}
-                    </td>
+        <div className="min-w-0">
+          <div className="space-y-3 md:hidden">
+            {loadingAnalytics || loadingCustomMonitor ? (
+              Array.from({ length: 4 }).map((_, index) => (
+                <div
+                  key={`monitor-card-skeleton-${index}`}
+                  className="h-28 animate-pulse rounded-xl border border-ocean-100 bg-ocean-50"
+                />
+              ))
+            ) : !activeCategoryMonitor?.rows?.length ? (
+              <p className="py-2 text-xs text-ocean-600">
+                No assistance activity for the selected reporting window.
+              </p>
+            ) : (
+              activeCategoryMonitor.rows.map((row) => (
+                <div
+                  key={row.category_id}
+                  className="rounded-xl border border-ocean-100 bg-ocean-50/60 p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 text-sm font-semibold text-ocean-900">{row.label}</p>
+                    <p className="shrink-0 text-xs font-semibold tabular-nums text-ocean-800">
+                      {row.applications} apps
+                    </p>
+                  </div>
+                  <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1.5">
                     {MONITOR_STATUS_COLUMNS.map((status) => {
                       const count = row.statuses?.[status] ?? 0;
                       return (
-                        <td key={`${row.category_id}-${status}`} className="py-2 px-2 text-right">
+                        <div key={`${row.category_id}-${status}`} className="flex items-center justify-between gap-2">
+                          <span className="truncate text-[11px] text-ocean-600">{status}</span>
                           <span
-                            className={`inline-flex min-w-[1.5rem] justify-end ${
+                            className={`tabular-nums text-[11px] ${
                               count > 0 ? "font-medium text-ocean-900" : "text-ocean-300"
                             }`}
                           >
                             {count}
                           </span>
-                        </td>
+                        </div>
                       );
                     })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="hidden min-w-0 overflow-x-auto md:block">
+            <table className="w-full min-w-[720px] text-xs">
+              <thead>
+                <tr className="border-b border-ocean-100 text-left text-ocean-500">
+                  <th className="sticky left-0 bg-white py-2 pr-3 font-semibold">Assistance</th>
+                  <th className="px-2 py-2 text-right font-semibold">Applications</th>
+                  {MONITOR_STATUS_COLUMNS.map((status) => (
+                    <th key={status} className="whitespace-nowrap px-2 py-2 text-right font-semibold">
+                      {status}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loadingAnalytics || loadingCustomMonitor ? (
+                  Array.from({ length: 5 }).map((_, index) => (
+                    <tr key={`monitor-skeleton-${index}`} className="border-b border-ocean-50">
+                      <td className="sticky left-0 bg-white py-2 pr-3">
+                        <div className="h-3 w-44 animate-pulse rounded bg-ocean-100" />
+                      </td>
+                      {Array.from({ length: MONITOR_STATUS_COLUMNS.length + 1 }).map((__, cellIndex) => (
+                        <td key={`monitor-skeleton-cell-${index}-${cellIndex}`} className="px-2 py-2">
+                          <div className="ml-auto h-3 w-8 animate-pulse rounded bg-ocean-100" />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : !activeCategoryMonitor?.rows?.length ? (
+                  <tr>
+                    <td
+                      colSpan={MONITOR_STATUS_COLUMNS.length + 2}
+                      className="py-4 text-ocean-600"
+                    >
+                      No assistance activity for the selected reporting window.
+                    </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  activeCategoryMonitor.rows.map((row) => (
+                    <tr
+                      key={row.category_id}
+                      className="border-b border-ocean-50 hover:bg-ocean-50/60"
+                    >
+                      <td className="sticky left-0 bg-white py-2 pr-3 font-medium text-ocean-800">
+                        {row.label}
+                      </td>
+                      <td className="px-2 py-2 text-right font-semibold text-ocean-900">
+                        {row.applications}
+                      </td>
+                      {MONITOR_STATUS_COLUMNS.map((status) => {
+                        const count = row.statuses?.[status] ?? 0;
+                        return (
+                          <td key={`${row.category_id}-${status}`} className="px-2 py-2 text-right">
+                            <span
+                              className={`inline-flex min-w-[1.5rem] justify-end ${
+                                count > 0 ? "font-medium text-ocean-900" : "text-ocean-300"
+                              }`}
+                            >
+                              {count}
+                            </span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     </div>

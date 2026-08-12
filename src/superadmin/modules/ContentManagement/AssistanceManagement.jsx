@@ -6,8 +6,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { formatAssistanceLineTitle } from "../../../shared/lib/assistanceCategoryDisplay.js";
 import { DEFAULT_ADMIN_THEME } from "../../../shared/config/roleConfig.js";
-import { supabase } from "../../../shared/lib/supabaseClient.js";
-import { archiveAssistanceCategory } from "../../../shared/lib/catalogLifecycle.js";
+import {
+  cmsCategoryArchive,
+  cmsCategoryCreate,
+  cmsCategoryUpdate,
+} from "../../../shared/lib/superAdminServicesApi.js";
 import {
   buildBlendedAdminPaletteFromSeeds,
   normalizeThemeJsonHex,
@@ -160,34 +163,6 @@ export function AssistanceManagement({
 
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
-  const generateUniqueCategorySlug = useCallback(async (assistanceName) => {
-    const base = slugify(assistanceName) || "category";
-
-    const { data: existing, error: slugError } = await supabase
-      .from("assistance_categories")
-      .select("slug")
-      .like("slug", `${base}%`);
-    if (slugError) throw slugError;
-
-    const taken = new Set((existing ?? []).map((row) => row.slug));
-    if (!taken.has(base)) return base;
-    let n = 2;
-    while (taken.has(`${base}-${n}`)) n += 1;
-    return `${base}-${n}`;
-  }, []);
-
-  const getNextSortOrder = useCallback(async () => {
-    const { data, error: sortError } = await supabase
-      .from("assistance_categories")
-      .select("sort_order")
-      .order("sort_order", { ascending: false })
-      .limit(1);
-    if (sortError) throw sortError;
-    const top = Array.isArray(data) && data.length ? data[0]?.sort_order : null;
-    const n = Number.isFinite(top) ? top : 0;
-    return n + 1;
-  }, []);
-
   const handleSubmit = async () => {
     if (disabled) return;
 
@@ -195,45 +170,25 @@ export function AssistanceManagement({
     setSavePhase(isEdit ? "update" : "create");
     setIsSaving(true);
     try {
-      const themeSlug = isEdit ? category.slug : await generateUniqueCategorySlug(assistanceNameTrimmed);
+      const themeSlug = isEdit ? category.slug : slugify(assistanceNameTrimmed) || "category";
       const themeJson = buildThemeJsonPayload(themeSlug, form.themeColor);
       const description = form.description.trim() || null;
 
       if (isEdit) {
-        const { data: updated, error: updateError } = await supabase
-          .from("assistance_categories")
-          .update({
-            assistance_name: assistanceNameTrimmed,
-            description,
-            theme_json: themeJson,
-          })
-          .eq("id", category.uuid)
-          .eq("active", true)
-          .select("id")
-          .maybeSingle();
-        if (updateError) throw updateError;
-        if (!updated?.id) {
-          throw new Error("This assistance is archived or no longer available to edit.");
-        }
-
+        await cmsCategoryUpdate({
+          categoryId: category.uuid,
+          assistance_name: assistanceNameTrimmed,
+          description,
+          theme_json: themeJson,
+        });
         await Promise.resolve(onSaved?.(category.slug));
       } else {
-        const sortOrder = await getNextSortOrder();
-        const { data: inserted, error: insertError } = await supabase
-          .from("assistance_categories")
-          .insert({
-            slug: themeSlug,
-            assistance_name: assistanceNameTrimmed,
-            description,
-            theme_json: themeJson,
-            active: true,
-            sort_order: sortOrder,
-          })
-          .select("slug")
-          .single();
-        if (insertError) throw insertError;
-
-        await Promise.resolve(onSaved?.(inserted?.slug || themeSlug));
+        const result = await cmsCategoryCreate({
+          assistance_name: assistanceNameTrimmed,
+          description,
+          theme_json: themeJson,
+        });
+        await Promise.resolve(onSaved?.(result?.slug || themeSlug));
       }
 
       onClose?.();
@@ -256,7 +211,7 @@ export function AssistanceManagement({
     setSavePhase("archive");
     setIsSaving(true);
     try {
-      await archiveAssistanceCategory(supabase, category.uuid);
+      await cmsCategoryArchive(category.uuid);
       await Promise.resolve(onSaved?.(null));
       setArchiveOpen(false);
       onClose?.();

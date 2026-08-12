@@ -4,13 +4,13 @@ import SuperadminLayout from "./SuperadminLayout.jsx";
 import { NotificationsPage } from "./modules/notifications/NotificationsPage.jsx";
 import { Reports } from "./modules/Reports.jsx";
 import { AuditTrail } from "./modules/AuditTrail.jsx";
+import { Voters } from "./modules/DataManagement/Voters.jsx";
+import { Admins } from "./modules/DataManagement/Admins.jsx";
 import { User } from "./modules/DataManagement/User.jsx";
-import { Admin } from "./modules/DataManagement/Admin.jsx";
-import { SystemSettingsPage } from "./modules/Accesibility/SystemSettingsPage.jsx";
-import { AdminSettingsPage } from "./modules/Accesibility/AdminSettingsPage.jsx";
-import { UserSettingsPage } from "./modules/Accesibility/UserSettingsPage.jsx";
+import { SystemSettings } from "./modules/Accesibility/SystemSettings.jsx";
+import { ServiceSettings } from "./modules/Accesibility/ServiceSettings.jsx";
 import { Services } from "./modules/ContentManagement/Services.jsx";
-import { InformationPage } from "./modules/ContentManagement/Information.jsx";
+import { Web } from "./modules/ContentManagement/Web.jsx";
 import { DashboardPage } from "./modules/Dashboard.jsx";
 
 export default function SuperadminRoutes() {
@@ -29,21 +29,24 @@ export default function SuperadminRoutes() {
         <Route path="reports" element={<Reports />} />
         <Route path="content-management" element={<Navigate to="/superadmin/content-management/services" replace />} />
         <Route path="content-management/services" element={<Services />} />
-        <Route
-          path="content-management/information"
-          element={<InformationPage />}
-        />
+        <Route path="content-management/web" element={<Web />} />
         <Route path="content-management/mobile" element={<Navigate to="/superadmin/content-management/services" replace />} />
-        <Route path="content-management/web" element={<Navigate to="/superadmin/content-management/information" replace />} />
-        <Route path="data-management" element={<Navigate to="/superadmin/data-management/user" replace />} />
-        <Route path="data-management/user" element={<User />} />
-        <Route path="data-management/admin" element={<Admin />} />
-        <Route path="profiles/users" element={<Navigate to="/superadmin/data-management/user" replace />} />
-        <Route path="profiles/admin" element={<Navigate to="/superadmin/data-management/admin" replace />} />
+        <Route path="content-management/information" element={<Navigate to="/superadmin/content-management/web" replace />} />
+        <Route path="data-management" element={<Navigate to="/superadmin/data-management/users" replace />} />
+        <Route path="data-management/users" element={<User />} />
+        <Route path="data-management/users/:userId" element={<User />} />
+        <Route path="data-management/voters" element={<Voters />} />
+        <Route path="data-management/admins" element={<Admins />} />
+        <Route path="data-management/user" element={<Navigate to="/superadmin/data-management/users" replace />} />
+        <Route path="data-management/admin" element={<Navigate to="/superadmin/data-management/admins" replace />} />
+        <Route path="profiles/users" element={<Navigate to="/superadmin/data-management/users" replace />} />
+        <Route path="profiles/admin" element={<Navigate to="/superadmin/data-management/admins" replace />} />
         <Route path="audit-trail" element={<AuditTrail />} />
-        <Route path="global-settings/system" element={<SystemSettingsPage />} />
-        <Route path="global-settings/admin" element={<AdminSettingsPage />} />
-        <Route path="global-settings/user" element={<UserSettingsPage />} />
+        <Route path="global-settings" element={<Navigate to="/superadmin/global-settings/system" replace />} />
+        <Route path="global-settings/system" element={<SystemSettings />} />
+        <Route path="global-settings/service" element={<ServiceSettings />} />
+        <Route path="global-settings/admin" element={<Navigate to="/superadmin/global-settings/service" replace />} />
+        <Route path="global-settings/user" element={<Navigate to="/superadmin/global-settings/system" replace />} />
         <Route
           path="*"
           element={
@@ -59,4 +62,3 @@ export default function SuperadminRoutes() {
     </Routes>
   );
 }
-

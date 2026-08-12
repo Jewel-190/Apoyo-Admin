@@ -82,7 +82,7 @@ export function DetailFieldsGrid({ rows }) {
 
 export function DetailActionsPanel({ children }) {
   return (
-    <div className="space-y-5 rounded-2xl border border-gray-100 bg-gradient-to-b from-white via-cyan-50/40 to-teal-50/30 p-5 shadow-[0_2px_20px_-10px_rgba(0,139,136,0.18)] md:p-6">
+    <div className="min-w-0 space-y-5 rounded-2xl border border-gray-100 bg-gradient-to-b from-white via-cyan-50/40 to-teal-50/30 p-4 shadow-[0_2px_20px_-10px_rgba(0,139,136,0.18)] sm:p-5 md:p-6">
       {children}
     </div>
   );
@@ -90,13 +90,13 @@ export function DetailActionsPanel({ children }) {
 
 export function InterviewInstructions({ applicationId }) {
   return (
-    <div className="rounded-2xl border border-[#008B88]/15 bg-gradient-to-br from-[#008B88]/5 via-white to-[#06C1EC]/10 p-5 shadow-inner md:p-6">
-      <div className="mb-4 flex items-center gap-2 border-b border-[#008B88]/10 pb-4">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[#008B88] shadow-sm ring-1 ring-[#008B88]/15">
+    <div className="rounded-2xl border border-[#008B88]/15 bg-gradient-to-br from-[#008B88]/5 via-white to-[#06C1EC]/10 p-4 shadow-inner sm:p-5 md:p-6">
+      <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-[#008B88]/10 pb-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#008B88] shadow-sm ring-1 ring-[#008B88]/15">
           <ListChecks size={18} strokeWidth={2} />
         </span>
-        <div>
-          <h3 className="text-lg font-semibold tracking-tight text-gray-900" style={detailFont}>
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold tracking-tight text-gray-900 sm:text-lg" style={detailFont}>
             Instructions
           </h3>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-[#008B88]/80">Applicant briefing</p>
@@ -105,23 +105,23 @@ export function InterviewInstructions({ applicationId }) {
       <ul className="space-y-4 text-sm leading-relaxed text-gray-600">
         <li className="flex gap-3">
           <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[#008B88]" strokeWidth={2} aria-hidden />
-          <div>
+          <div className="min-w-0">
             <span className="font-semibold text-gray-800">Step 1:</span> Visit the Socio-Economic and Multi-Purpose
             Building Barangay Burol Main, City of Dasmariñas, Cavite
           </div>
         </li>
         <li className="flex gap-3">
           <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[#06C1EC]" strokeWidth={2} aria-hidden />
-          <div>
+          <div className="min-w-0">
             <span className="font-semibold text-gray-800">Step 2:</span> Present your Application Number:{" "}
-            <strong className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[#008B88] ring-1 ring-gray-200">
+            <strong className="inline-block max-w-full break-all rounded-md bg-white px-1.5 py-0.5 font-mono text-[#008B88] ring-1 ring-gray-200">
               {applicationId}
             </strong>
           </div>
         </li>
         <li className="flex gap-3">
           <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[#008B88]" strokeWidth={2} aria-hidden />
-          <div>
+          <div className="min-w-0">
             <span className="font-semibold text-gray-800">Step 3:</span> Bring one (1) Original Valid ID for
             verification.
           </div>

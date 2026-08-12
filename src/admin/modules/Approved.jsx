@@ -1,18 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, Eye, RefreshCcw, Archive as ArchiveIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, RefreshCcw, Archive as ArchiveIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import MiniNotifications from "../components/MiniNotifications";
+import ApplicationsListTable from "../components/ApplicationsListTable";
 import ReviewApplications from "./Applications/ReviewApplications";
 import {
   fetchApprovedApplicationsPage,
   invalidateAdminPipelineCaches,
 } from "../../shared/lib/requestData";
-import { getAdminRequestStatusBadgeStyle } from "../../shared/lib/adminLineStatusStyles";
+import { getAdminRequestStatusBadgeStyle, lineAdminInsetHairline } from "../../shared/lib/adminLineStatusStyles";
 import { useAuth } from "../../shared/context/AuthContext";
 import { useOpenRequestFromLocation } from "../../shared/hooks/useOpenRequestFromLocation";
+import {
+  TIME_PRESET_OPTIONS,
+  buildDefaultCustomRange,
+  resolveTimeRangePreset,
+} from "../../shared/lib/timeRangePresets";
 
 const PAGE_SIZE = 50;
 const PAGE_SIBLING_COUNT = 1;
 const SEARCH_DEBOUNCE_MS = 350;
+const DEFAULT_TIME_PRESET = "all_time";
 
 /** Compact page list that stays usable with thousands of pages: 1 … 4 5 6 … 1200 */
 function buildPageItems(currentPage, totalPages, siblingCount = PAGE_SIBLING_COUNT) {
@@ -64,6 +71,11 @@ export default function Approved() {
   const [applications, setApplications] = useState([]);
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [timePreset, setTimePreset] = useState(DEFAULT_TIME_PRESET);
+  const [customRangeDraft, setCustomRangeDraft] = useState(buildDefaultCustomRange);
+  const [customRangeApplied, setCustomRangeApplied] = useState(null);
+  const [customRangeError, setCustomRangeError] = useState("");
+  const [activeRangeLabel, setActiveRangeLabel] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [activeTab, setActiveTab] = useState("All");
@@ -99,6 +111,24 @@ export default function Approved() {
     return match?.serviceId ? String(match.serviceId) : null;
   }, [activeTab, sourceTables]);
 
+  const canFetchApproved =
+    timePreset !== "custom" || Boolean(customRangeApplied);
+
+  const resolvedTimeRange = useMemo(() => {
+    if (!canFetchApproved) {
+      return null;
+    }
+    try {
+      return resolveTimeRangePreset(
+        timePreset,
+        customRangeApplied?.from ?? null,
+        customRangeApplied?.to ?? null
+      );
+    } catch {
+      return null;
+    }
+  }, [canFetchApproved, timePreset, customRangeApplied]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedSearch(searchInput.trim());
@@ -117,6 +147,19 @@ export default function Approved() {
         setApplications([]);
         setTotal(0);
         setCurrentPage(1);
+        setActiveRangeLabel("");
+        setIsLoading(false);
+        return;
+      }
+
+      if (!resolvedTimeRange) {
+        if (requestSeq !== loadSeqRef.current) {
+          return;
+        }
+        setApplications([]);
+        setTotal(0);
+        setCurrentPage(1);
+        setActiveRangeLabel("");
         setIsLoading(false);
         return;
       }
@@ -132,6 +175,7 @@ export default function Approved() {
           search: debouncedSearch,
           page: safePage,
           pageSize: PAGE_SIZE,
+          timeRange: resolvedTimeRange,
         });
 
         if (requestSeq !== loadSeqRef.current) {
@@ -141,6 +185,7 @@ export default function Approved() {
         setApplications(result.applications || []);
         setTotal(result.total || 0);
         setCurrentPage(result.page || 1);
+        setActiveRangeLabel(result.range?.label || resolvedTimeRange.label || "");
       } catch (error) {
         if (requestSeq !== loadSeqRef.current) {
           return;
@@ -148,16 +193,17 @@ export default function Approved() {
         setLoadError(error?.message || "Failed to load approved applications.");
         setApplications([]);
         setTotal(0);
+        setActiveRangeLabel("");
       } finally {
         if (requestSeq === loadSeqRef.current) {
           setIsLoading(false);
         }
       }
     },
-    [sourceTables, activeServiceId, debouncedSearch]
+    [sourceTables, activeServiceId, debouncedSearch, resolvedTimeRange]
   );
 
-  // Filter/search changes recreate loadApprovedPage → always restart at page 1.
+  // Filter/search/range changes recreate loadApprovedPage → always restart at page 1.
   useEffect(() => {
     void loadApprovedPage(1);
   }, [loadApprovedPage, reloadKey]);
@@ -194,7 +240,50 @@ export default function Approved() {
     setReloadKey((previous) => previous + 1);
   };
 
+  const handlePresetChange = (nextPreset) => {
+    setTimePreset(nextPreset);
+    setCustomRangeError("");
+    setCurrentPage(1);
+    if (nextPreset !== "custom") {
+      setCustomRangeApplied(null);
+    } else {
+      setActiveRangeLabel("");
+      setApplications([]);
+      setTotal(0);
+    }
+  };
+
+  const handleApplyCustomRange = () => {
+    const from = String(customRangeDraft.from || "").trim();
+    const to = String(customRangeDraft.to || "").trim();
+
+    if (!from || !to) {
+      setCustomRangeError("Select both a start and end date.");
+      return;
+    }
+
+    if (from > to) {
+      setCustomRangeError("Start date must be on or before end date.");
+      return;
+    }
+
+    try {
+      resolveTimeRangePreset("custom", from, to);
+    } catch (error) {
+      setCustomRangeError(error?.message || "Invalid custom date range.");
+      return;
+    }
+
+    setCustomRangeError("");
+    setCurrentPage(1);
+    setCustomRangeApplied({ from, to });
+    setTimePreset("custom");
+  };
+
   const handleReload = () => {
+    if (!canFetchApproved) {
+      return;
+    }
     invalidateAdminPipelineCaches();
     void loadApprovedPage(currentPage);
   };
@@ -240,58 +329,147 @@ export default function Approved() {
         <MiniNotifications />
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5">
-          <div className="flex flex-col gap-1">
-            <h1
-              className="text-2xl"
-              style={{
-                fontFamily: "'Instrument Sans', sans-serif",
-                fontWeight: 500,
-              }}
-            >
-              <span className="text-gray-800">All </span>
-              <span
+      <div className="min-w-0 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6">
+        <div className="mb-5 flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-col gap-1">
+              <h1
+                className="text-2xl"
                 style={{
-                  background: `linear-gradient(to right, ${theme.primary}, ${theme.secondary})`,
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
                   fontFamily: "'Instrument Sans', sans-serif",
                   fontWeight: 500,
                 }}
               >
-                Approved
-              </span>
-              <span className="text-gray-800"> Applications</span>
-            </h1>
-            <p className="text-xs text-gray-500">
-              {isLoading
-                ? "Loading approved applications..."
-                : total > 0
-                  ? `Showing ${formatCount(rangeStart)}–${formatCount(rangeEnd)} of ${formatCount(total)} approved`
-                  : "0 approved applications"}
-            </p>
+                <span className="text-gray-800">All </span>
+                <span
+                  style={{
+                    background: `linear-gradient(to right, ${theme.primary}, ${theme.secondary})`,
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    fontFamily: "'Instrument Sans', sans-serif",
+                    fontWeight: 500,
+                  }}
+                >
+                  Approved
+                </span>
+                <span className="text-gray-800"> Applications</span>
+              </h1>
+              <p className="text-xs text-gray-500">
+                {isLoading
+                  ? "Loading approved applications..."
+                  : canFetchApproved
+                    ? total > 0
+                      ? `Showing ${formatCount(rangeStart)}–${formatCount(rangeEnd)} of ${formatCount(total)} approved`
+                      : "0 approved applications in range"
+                    : "Select a custom date range to load approved applications"}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleReload}
+              className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+              style={{ boxShadow: lineAdminInsetHairline(theme.primary) }}
+              disabled={isLoading || !canFetchApproved}
+            >
+              <RefreshCcw size={13} className={isLoading ? "animate-spin" : ""} />
+              {isLoading ? "Reloading..." : "Reload"}
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleReload}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60"
-            style={{ boxShadow: `0 0 0 1px ${theme.primary}22 inset` }}
-            disabled={isLoading}
-          >
-            <RefreshCcw size={13} className={isLoading ? "animate-spin" : ""} />
-            {isLoading ? "Reloading..." : "Reload"}
-          </button>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {TIME_PRESET_OPTIONS.map((option) => {
+                const isActive = timePreset === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handlePresetChange(option.value)}
+                    className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                      isActive
+                        ? "text-white shadow-sm"
+                        : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                    style={
+                      isActive
+                        ? {
+                            backgroundImage: `linear-gradient(to right, ${primary}, ${secondary})`,
+                          }
+                        : undefined
+                    }
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {activeRangeLabel ? (
+              <p className="text-[11px] font-medium text-gray-500">
+                Viewing: {activeRangeLabel}
+              </p>
+            ) : null}
+
+            {timePreset === "custom" ? (
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="text-[11px] text-gray-500">
+                  From
+                  <input
+                    type="date"
+                    value={customRangeDraft.from}
+                    onChange={(event) =>
+                      setCustomRangeDraft((previous) => ({
+                        ...previous,
+                        from: event.target.value,
+                      }))
+                    }
+                    className="mt-1 block rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-700 outline-none focus-visible:ring-2"
+                    style={{ accentColor: primary }}
+                  />
+                </label>
+                <label className="text-[11px] text-gray-500">
+                  To
+                  <input
+                    type="date"
+                    value={customRangeDraft.to}
+                    onChange={(event) =>
+                      setCustomRangeDraft((previous) => ({
+                        ...previous,
+                        to: event.target.value,
+                      }))
+                    }
+                    className="mt-1 block rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-700 outline-none focus-visible:ring-2"
+                    style={{ accentColor: primary }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleApplyCustomRange}
+                  disabled={isLoading}
+                  className="rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    backgroundImage: `linear-gradient(to right, ${primary}, ${secondary})`,
+                  }}
+                >
+                  Apply Range
+                </button>
+              </div>
+            ) : null}
+
+            {customRangeError ? (
+              <p className="text-xs text-red-600">{customRangeError}</p>
+            ) : null}
+          </div>
         </div>
 
-        <div className="flex gap-6 border-b border-gray-200 mb-4">
+        <div className="mb-4 flex gap-6 overflow-x-auto border-b border-gray-200">
           {tabs.map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => handleTabChange(tab)}
-              className={`pb-2 text-sm font-medium transition-all duration-200 border-b-2 -mb-px ${
+              className={`-mb-px shrink-0 pb-2 text-sm font-medium transition-all duration-200 border-b-2 ${
                 activeTab === tab
                   ? "text-gray-800"
                   : "border-transparent text-gray-400 hover:text-gray-600"
@@ -303,79 +481,23 @@ export default function Approved() {
           ))}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500 text-xs font-semibold border-b border-gray-200">
-                <th className="pb-3 pr-4">Application ID</th>
-                <th className="pb-3 pr-4">Applicant Name</th>
-                <th className="pb-3 pr-4">Service Category</th>
-                <th className="pb-3 pr-4">Application Date</th>
-                <th className="pb-3 pr-4">Status</th>
-                <th className="pb-3">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading && (
-                <tr>
-                  <td colSpan="6" className="py-12 text-center text-gray-400">
-                    Loading approved applications...
-                  </td>
-                </tr>
-              )}
-
-              {!isLoading && loadError && (
-                <tr>
-                  <td colSpan="6" className="py-12 text-center text-red-500">
-                    {loadError}
-                  </td>
-                </tr>
-              )}
-
-              {!isLoading && !loadError && applications.length === 0 && (
-                <tr>
-                  <td colSpan="6" className="py-12 text-center text-gray-400">
-                    {debouncedSearch
-                      ? "No approved applications match your search."
-                      : "No approved applications found."}
-                  </td>
-                </tr>
-              )}
-
-              {!isLoading &&
-                !loadError &&
-                applications.map((row, index) => (
-                  <tr
-                    key={row.key}
-                    className={`text-xs ${
-                      index % 2 === 0 ? "bg-gray-50" : "bg-white"
-                    }`}
-                  >
-                    <td className="py-2.5 pr-4 font-semibold text-gray-700 pl-2">
-                      {row.id}
-                    </td>
-                    <td className="py-2.5 pr-4 text-gray-600">{row.name}</td>
-                    <td className="py-2.5 pr-4 text-gray-600">{row.category}</td>
-                    <td className="py-2.5 pr-4 text-gray-500">{row.date}</td>
-                    <td className="py-2.5 pr-4">
-                      <StatusBadge status={row.status} />
-                    </td>
-                    <td className="py-2.5">
-                      <button
-                        type="button"
-                        onClick={() => handleViewApplication(row)}
-                        className="flex items-center gap-1 font-semibold hover:underline text-xs"
-                        style={{ color: theme.secondary }}
-                      >
-                        <Eye size={13} />
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
+        <ApplicationsListTable
+          rows={applications}
+          isLoading={isLoading}
+          loadError={loadError}
+          emptyMessage={
+            !canFetchApproved
+              ? "Select a custom date range to load approved applications."
+              : debouncedSearch
+                ? "No approved applications match your search in this range."
+                : "No approved applications found in this range."
+          }
+          loadingMessage="Loading approved applications..."
+          actionLabel="View"
+          actionColor={theme.secondary}
+          onAction={handleViewApplication}
+          renderStatus={(status) => <StatusBadge status={status} />}
+        />
 
         {!isLoading && total > 0 ? (
           <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">

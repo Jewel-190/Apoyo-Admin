@@ -12,14 +12,20 @@ import {
   resolvePreflightRows,
 } from "../../../shared/lib/requestReviewDisplay";
 import { formatCaseStudyDateTimeDisplay } from "../../../shared/lib/schedulingDateTime";
+import {
+  fetchRequestAttachments,
+  mapAttachments,
+} from "../../../shared/lib/requestAttachments";
 import { DetailActionsPanel, InterviewInstructions } from "../../components/forApprovalDetailUi";
 import { detailFont, detailPrimaryButtonCompactClass } from "../../components/forApprovalDetailStyles";
 import { getAdminRequestStatusBadgeStyle } from "../../../shared/lib/adminLineStatusStyles";
+import SubmittedDocumentsThumbnails from "../../components/SubmittedDocumentsThumbnails";
 
 /**
  * Shared split-panel detail:
- * - variant `schedule`: For Approval â†’ one-click move to Scheduled (default).
- * - variant `disbursement`: Case study queue â†’ approve for disbursement (DB `approved`, Approved list).
+ * - variant `schedule`: For Approval → one-click move to Scheduled (default).
+ * - variant `disbursement`: Case study queue → approve for disbursement (DB `approved`, Approved list).
+ * Includes read-only submitted-document preview alongside scheduling/disbursement actions.
  */
 export default function ApprovalReviewDetails({
   application,
@@ -34,9 +40,11 @@ export default function ApprovalReviewDetails({
   readOnly = false,
   backLabel = "Back to scheduling",
 }) {
-  const { allowedServiceIds } = useAuth();
+  const { allowedServiceIds, roleConfig } = useAuth();
+  const attachmentCatalog = roleConfig?.attachmentCatalog;
   const [requestData, setRequestData] = useState(null);
   const [requesterData, setRequesterData] = useState(null);
+  const [documentsList, setDocumentsList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -48,6 +56,7 @@ export default function ApprovalReviewDetails({
         setLoadError("Missing application context.");
         setRequestData(null);
         setRequesterData(null);
+        setDocumentsList([]);
         setIsLoading(false);
         return;
       }
@@ -73,14 +82,18 @@ export default function ApprovalReviewDetails({
           setLoadError("This request is not in your line or you do not have access.");
           setRequestData(null);
           setRequesterData(null);
+          setDocumentsList([]);
           setIsLoading(false);
           return;
         }
 
         const userId = requestRow?.user_id || application.userId;
-        const requesterResult = userId
-          ? await supabase.from("users").select("*").eq("id", userId).maybeSingle()
-          : { data: null, error: null };
+        const [requesterResult, attachmentsResult] = await Promise.all([
+          userId
+            ? supabase.from("users").select("*").eq("id", userId).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          fetchRequestAttachments(application.requestId),
+        ]);
 
         if (cancelled) return;
 
@@ -88,13 +101,27 @@ export default function ApprovalReviewDetails({
           throw requesterResult.error;
         }
 
+        if (attachmentsResult.error) {
+          throw attachmentsResult.error;
+        }
+
+        const nextDocuments = mapAttachments(
+          attachmentsResult.data || [],
+          application.serviceId,
+          attachmentCatalog
+        );
+
+        if (cancelled) return;
+
         setRequestData(requestRow || null);
         setRequesterData(requesterResult.data || null);
+        setDocumentsList(nextDocuments);
       } catch (error) {
         if (cancelled) return;
         setLoadError(error?.message || "Failed to load request details.");
         setRequestData(null);
         setRequesterData(null);
+        setDocumentsList([]);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -104,7 +131,13 @@ export default function ApprovalReviewDetails({
     return () => {
       cancelled = true;
     };
-  }, [application?.serviceId, application?.requestId, application?.userId, allowedServiceIds]);
+  }, [
+    application?.serviceId,
+    application?.requestId,
+    application?.userId,
+    allowedServiceIds,
+    roleConfig?.attachmentCatalog,
+  ]);
 
   const requestStatus = normalizeStatus(requestData?.status || application?.status);
   const statusBadgeStyle = getAdminRequestStatusBadgeStyle(requestStatus);
@@ -176,62 +209,62 @@ export default function ApprovalReviewDetails({
 
   return (
     <div
-      className="h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] md:h-[calc(100dvh-3rem)] md:max-h-[calc(100dvh-3rem)] w-full max-w-full flex min-h-0 flex-col box-border"
+      className="box-border flex h-[calc(100dvh-7.25rem)] max-h-[calc(100dvh-7.25rem)] w-full max-w-full min-h-0 flex-col md:h-[calc(100dvh-3rem)] md:max-h-[calc(100dvh-3rem)]"
       style={{ fontFamily: "'Instrument Sans', sans-serif" }}
     >
       <div
         className="flex min-h-0 flex-1 w-full max-w-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-[0_4px_28px_-10px_rgba(0,139,136,0.22)] ring-1 ring-gray-900/[0.04]"
         style={{ fontFamily: "'Instrument Sans', sans-serif" }}
       >
-      <div className="flex items-center justify-between px-6 md:px-8 py-4 border-b border-gray-200 shrink-0">
-        <div className="flex items-center gap-4 min-w-0">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4 md:px-8">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-4">
           <button
             type="button"
             onClick={onBack}
-            className="p-2 text-gray-400 hover:text-gray-600 transition shrink-0"
+            className="shrink-0 p-2 text-gray-400 transition hover:text-gray-600"
             aria-label={backLabel}
           >
-            <ChevronLeft className="w-6 h-6" />
+            <ChevronLeft className="h-6 w-6" />
           </button>
           <div className="min-w-0">
-            <h1 className="text-xl md:text-3xl font-semibold truncate text-[color:var(--apoyo-primary)]">
+            <h1 className="truncate text-xl font-semibold text-[color:var(--apoyo-primary)] sm:text-2xl md:text-3xl">
               {headerTitle}
             </h1>
-            <p className="text-xs text-gray-500 truncate mt-0.5 hidden sm:block">{backLabel}</p>
+            <p className="mt-0.5 hidden truncate text-xs text-gray-500 sm:block">{backLabel}</p>
           </div>
         </div>
       </div>
 
       {isLoading && (
-        <div className="flex-1 min-h-0 flex items-center justify-center text-gray-500 text-sm">
+        <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-gray-500">
           Loading request details...
         </div>
       )}
 
       {!isLoading && (
-        <div className="flex flex-1 min-h-0 overflow-hidden">
-          <div className="w-1/2 border-r border-gray-200 bg-white min-h-0 flex flex-col overflow-hidden">
-            <div className="px-6 py-3 border-b border-gray-200 bg-white z-10 shrink-0">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+          <div className="flex w-full min-w-0 shrink-0 flex-col border-b border-gray-200 bg-white lg:min-h-0 lg:w-1/2 lg:shrink lg:flex-1 lg:overflow-hidden lg:border-b-0 lg:border-r">
+            <div className="z-10 shrink-0 border-b border-gray-200 bg-white px-4 py-3 sm:px-6">
               <h2 className="text-sm font-semibold text-gray-800">Details</h2>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              <div className="px-6 py-4 space-y-2">
+            <div className="min-w-0 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+              <div className="space-y-2 px-4 py-4 sm:px-6">
                 {loadError && (
-                  <div className="bg-red-50 border border-red-200 text-red-600 text-xs px-3 py-2 rounded">
+                  <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
                     {loadError}
                   </div>
                 )}
 
                 <div className="text-xs">
                   <span className="font-semibold text-gray-800">Date Applied:</span>
-                  <span className="text-gray-700 ml-2 break-all">{dateApplied}</span>
+                  <span className="ml-2 break-all text-gray-700">{dateApplied}</span>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold text-gray-800">Status:</span>
                   <span
-                    className="px-2 py-0.5 rounded-full text-xs font-medium"
+                    className="rounded-full px-2 py-0.5 text-xs font-medium"
                     style={statusBadgeStyle}
                   >
                     {requestStatus}
@@ -241,56 +274,56 @@ export default function ApprovalReviewDetails({
                 {scheduledInterviewLabel ? (
                   <div className="text-xs">
                     <span className="font-semibold text-gray-800">Interview scheduled:</span>
-                    <span className="text-gray-700 ml-2 break-all">{scheduledInterviewLabel}</span>
+                    <span className="ml-2 break-all text-gray-700">{scheduledInterviewLabel}</span>
                   </div>
                 ) : null}
 
-                <div className="bg-gray-100 p-2.5 rounded text-xs">
+                <div className="rounded bg-gray-100 p-2.5 text-xs">
                   <span className="font-semibold text-gray-800">Type of Assistance:</span>
-                  <span className="text-gray-700 ml-1 break-all">{assistanceType}</span>
+                  <span className="ml-1 break-all text-gray-700">{assistanceType}</span>
                 </div>
 
                 <div className="text-xs">
                   <span className="font-semibold text-gray-800">Application ID:</span>
-                  <span className="text-gray-700 ml-2 break-all">{requestCode}</span>
+                  <span className="ml-2 break-all text-gray-700">{requestCode}</span>
                 </div>
 
-                <div className="bg-gray-100 p-2.5 rounded text-xs">
+                <div className="rounded bg-gray-100 p-2.5 text-xs">
                   <span className="font-semibold text-gray-800">Name:</span>
-                  <span className="text-gray-700 ml-1 break-all">{requesterName}</span>
+                  <span className="ml-1 break-all text-gray-700">{requesterName}</span>
                 </div>
 
                 <div className="text-xs">
                   <span className="font-semibold text-gray-800">Birthday:</span>
-                  <span className="text-gray-700 ml-2 break-all">{birthday}</span>
+                  <span className="ml-2 break-all text-gray-700">{birthday}</span>
                 </div>
 
-                <div className="bg-gray-100 p-2.5 rounded text-xs">
+                <div className="rounded bg-gray-100 p-2.5 text-xs">
                   <span className="font-semibold text-gray-800">Sex:</span>
-                  <span className="text-gray-700 ml-1 break-all">{sex}</span>
+                  <span className="ml-1 break-all text-gray-700">{sex}</span>
                 </div>
 
                 <div className="text-xs">
                   <span className="font-semibold text-gray-800">Address:</span>
-                  <span className="text-gray-700 ml-2 break-all">{address}</span>
+                  <span className="ml-2 break-all text-gray-700">{address}</span>
                 </div>
 
-                <div className="bg-gray-100 p-2.5 rounded text-xs">
+                <div className="rounded bg-gray-100 p-2.5 text-xs">
                   <span className="font-semibold text-gray-800">Contact No:</span>
-                  <span className="text-gray-700 ml-1 break-all">{contactNumber}</span>
+                  <span className="ml-1 break-all text-gray-700">{contactNumber}</span>
                 </div>
 
                 <div className="text-xs">
                   <span className="font-semibold text-gray-800">Email:</span>
-                  <span className="text-gray-700 ml-2 break-all">{email}</span>
+                  <span className="ml-2 break-all text-gray-700">{email}</span>
                 </div>
               </div>
 
-              <div className="mx-4 mb-4 bg-white border border-gray-300 rounded-lg px-3 py-3 shadow-sm">
+              <div className="mx-3 mb-4 rounded-lg border border-gray-300 bg-white px-3 py-3 shadow-sm sm:mx-4">
                 {hasCoverageField ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div>
-                      <div className="text-[11px] font-semibold text-gray-800 mb-1 leading-tight">
+                      <div className="mb-1 text-[11px] font-semibold leading-tight text-gray-800">
                         Coverage
                       </div>
                       <div className="max-h-32 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 pr-1">
@@ -302,12 +335,12 @@ export default function ApprovalReviewDetails({
                               key={`${row.label}-${index}`}
                               className={`text-xs leading-5 ${
                                 index < coverageRows.length - 1
-                                  ? "border-b border-gray-200 pb-1 mb-1"
+                                  ? "mb-1 border-b border-gray-200 pb-1"
                                   : ""
                               }`}
                             >
                               <span className="font-semibold text-gray-800">{row.label}:</span>
-                              <span className="ml-1 text-gray-700 break-words">{row.value}</span>
+                              <span className="ml-1 break-words text-gray-700">{row.value}</span>
                             </div>
                           ))
                         )}
@@ -315,21 +348,21 @@ export default function ApprovalReviewDetails({
                     </div>
 
                     <div>
-                      <div className="text-[11px] font-semibold text-gray-800 mb-1 leading-tight">
+                      <div className="mb-1 text-[11px] font-semibold leading-tight text-gray-800">
                         Additional Info
                       </div>
                       <textarea
                         readOnly
                         value={additionalInfoText}
                         rows={3}
-                        className="w-full h-[3.25rem] rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-700 leading-5 whitespace-pre-wrap break-all resize-none overflow-y-auto"
+                        className="h-[3.25rem] w-full resize-none overflow-y-auto whitespace-pre-wrap break-all rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs leading-5 text-gray-700"
                       />
                     </div>
                   </div>
                 ) : hasPreflightRows || hasFinancialRequestType ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div>
-                      <div className="text-[11px] font-semibold text-gray-800 mb-1 leading-tight">
+                      <div className="mb-1 text-[11px] font-semibold leading-tight text-gray-800">
                         Application choices
                       </div>
                       <div className="max-h-32 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 pr-1">
@@ -341,52 +374,54 @@ export default function ApprovalReviewDetails({
                             key={`${row.label}-${index}`}
                             className={`text-xs leading-5 ${
                               index < list.length - 1
-                                ? "border-b border-gray-200 pb-1 mb-1"
+                                ? "mb-1 border-b border-gray-200 pb-1"
                                 : ""
                             }`}
                           >
                             <span className="font-semibold text-gray-800">{row.label}:</span>
-                            <span className="ml-1 text-gray-700 break-words">{row.value}</span>
+                            <span className="ml-1 break-words text-gray-700">{row.value}</span>
                           </div>
                         ))}
                       </div>
                     </div>
 
                     <div>
-                      <div className="text-[11px] font-semibold text-gray-800 mb-1 leading-tight">
+                      <div className="mb-1 text-[11px] font-semibold leading-tight text-gray-800">
                         Additional Info
                       </div>
                       <textarea
                         readOnly
                         value={additionalInfoText}
                         rows={3}
-                        className="w-full h-[3.25rem] rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-700 leading-5 whitespace-pre-wrap break-all resize-none overflow-y-auto"
+                        className="h-[3.25rem] w-full resize-none overflow-y-auto whitespace-pre-wrap break-all rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs leading-5 text-gray-700"
                       />
                     </div>
                   </div>
                 ) : (
                   <>
-                    <div className="text-[11px] font-semibold text-gray-800 mb-1 leading-tight">
+                    <div className="mb-1 text-[11px] font-semibold leading-tight text-gray-800">
                       Additional Info
                     </div>
                     <textarea
                       readOnly
                       value={additionalInfoText}
                       rows={3}
-                      className="w-full h-[3.25rem] rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-700 leading-5 whitespace-pre-wrap break-all resize-none overflow-y-auto"
+                      className="h-[3.25rem] w-full resize-none overflow-y-auto whitespace-pre-wrap break-all rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs leading-5 text-gray-700"
                     />
                   </>
                 )}
               </div>
+
+              <SubmittedDocumentsThumbnails documents={documentsList} columns={2} />
             </div>
           </div>
 
-          <div className="w-1/2 bg-gray-100 flex flex-col min-h-0 overflow-hidden">
-            <div className="px-6 py-3 border-b border-gray-200 bg-white shrink-0">
+          <div className="flex min-h-[50vh] w-full min-w-0 flex-1 flex-col overflow-hidden bg-gray-100 lg:min-h-0 lg:w-1/2">
+            <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-3 sm:px-6">
               <h2 className="text-sm font-semibold text-gray-800">{rightPanelTitle}</h2>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto p-5 md:p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 md:p-6">
               <DetailActionsPanel>
 
                 {variant === "schedule" && readOnly && scheduledIso && (
@@ -394,7 +429,7 @@ export default function ApprovalReviewDetails({
                     <p className="text-[11px] font-bold uppercase tracking-wider text-[color:var(--apoyo-primary)]">
                       Scheduled interview
                     </p>
-                    <p className="mt-2 text-lg font-semibold text-gray-900" style={detailFont}>
+                    <p className="mt-2 break-words text-lg font-semibold text-gray-900" style={detailFont}>
                       {scheduledDisplay}
                     </p>
                   </div>
@@ -438,22 +473,28 @@ export default function ApprovalReviewDetails({
                     type="button"
                     disabled={isScheduling || typeof onConfirmSchedule !== "function"}
                     onClick={() => onConfirmSchedule?.()}
-                    className={`${detailPrimaryButtonCompactClass} w-full sm:w-auto`}
+                    className={`${detailPrimaryButtonCompactClass} w-full max-w-full text-center leading-snug whitespace-normal`}
                   >
                     {isScheduling ? "Saving schedule…" : "Schedule this applicant for interview / case study"}
                   </button>
                 )}
 
-                {variant === "disbursement" && (
+                {variant === "disbursement" && !readOnly && (
                   <button
                     type="button"
                     disabled={isApproving || typeof onApproveDisbursement !== "function"}
                     onClick={() => onApproveDisbursement?.()}
-                    className={`${detailPrimaryButtonCompactClass} w-full sm:w-auto`}
+                    className={`${detailPrimaryButtonCompactClass} w-full max-w-full text-center leading-snug whitespace-normal`}
                   >
                     {isApproving ? "Saving…" : "Approve for Disbursement"}
                   </button>
                 )}
+
+                {readOnly ? (
+                  <p className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
+                    Viewing current request state (read-only).
+                  </p>
+                ) : null}
               </DetailActionsPanel>
             </div>
           </div>
