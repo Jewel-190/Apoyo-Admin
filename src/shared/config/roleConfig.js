@@ -1,6 +1,8 @@
 /**
  * Admin shell helpers and loading placeholders.
  * Final access model: `admins.is_super_admin` + `admins.category_id`.
+ *
+ * Theme fallbacks point at System Theme CSS variables — never a hardcoded teal.
  */
 
 export const ADMIN_ROLES = {
@@ -8,19 +10,19 @@ export const ADMIN_ROLES = {
 };
 
 export const DEFAULT_ADMIN_THEME = {
-  primary: "#0f766e",
-  secondary: "#14b8a6",
-  tertiary: "#5eead4",
-  accent: "#ccfbf1",
-  ring: "#0d9488",
+  primary: "var(--system-primary)",
+  secondary: "var(--system-accent)",
+  tertiary: "var(--color-ocean-300)",
+  accent: "var(--color-ocean-100)",
+  ring: "var(--color-ocean-500)",
 };
 
 export const DEFAULT_SUPER_ADMIN_THEME = {
-  primary: "#111827",
-  secondary: "#374151",
-  tertiary: "#6B7280",
-  accent: "#2563EB",
-  ring: "#3B82F6",
+  primary: "var(--system-primary)",
+  secondary: "var(--system-accent)",
+  tertiary: "var(--color-ocean-400)",
+  accent: "var(--color-ocean-200)",
+  ring: "var(--color-ocean-500)",
 };
 
 export function normalizeRawRole(value) {

@@ -163,7 +163,7 @@ function FinalizeDocs({
             fontWeight: 500,
           }}
         >
-          <span style={{ color: "#008B88" }}>Verification </span>
+          <span style={{ color: "var(--apoyo-primary)" }}>Verification </span>
           <span style={{ color: "#D4AF37" }}>Summary </span>
           <span style={{ color: "#FF8500" }}>Table</span>
         </h1>
@@ -271,7 +271,7 @@ function FinalizeDocs({
               onClick={onProceedToFinalApproval}
               className="px-8 py-3 rounded-full text-sm transition hover:shadow-lg"
               style={{
-                backgroundColor: "#008B88",
+                backgroundColor: "var(--apoyo-primary)",
                 color: "#FFFFFF",
                 fontFamily: "'Instrument Sans', sans-serif",
                 fontWeight: 500,

@@ -43,13 +43,45 @@ type Payload = {
 const SETTINGS_DEFAULTS: Record<Scope, Record<string, Record<string, unknown>>> = {
   system: {
     "logo-and-banner": {
-      apoyo_logo_url: "",
-      apoyo_banner_url: "",
       dasma_logo_url: "",
       dasma_banner_url: "",
     },
+    "system-theme": {
+      primary_color: "#0b8f8b",
+    },
+    legal: {
+      "terms-and-conditions": { sections: [] },
+      "user-acceptance": { sections: [] },
+    },
   },
-  admin: {},
+  admin: {
+    "interview-scheduling": {
+      title: "Instructions",
+      subtitle: "Applicant briefing",
+      officeHours: {
+        days: "Monday - Friday",
+        start: "08:00",
+        end: "17:00",
+      },
+      steps: [
+        {
+          id: "step-visit",
+          kind: "text",
+          body: "Visit the Socio-Economic and Multi-Purpose Building Barangay Burol Main, City of Dasmariñas, Cavite",
+        },
+        {
+          id: "application-number",
+          kind: "application_number",
+          body: "Present your Application Number:",
+        },
+        {
+          id: "step-valid-id",
+          kind: "text",
+          body: "Bring one (1) Original Valid ID for verification.",
+        },
+      ],
+    },
+  },
   user: {},
 };
 
@@ -107,6 +139,162 @@ function assertVisibility(value: unknown, fallback: Visibility): Visibility {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+const LEGAL_PAGE_SLUGS = ["terms-and-conditions", "user-acceptance"] as const;
+
+function mapLegalSections(raw: unknown): { heading: string; body: string }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((section) => {
+    const item = isPlainObject(section) ? section : {};
+    return {
+      heading: String(item.heading ?? ""),
+      body: String(item.body ?? ""),
+    };
+  });
+}
+
+function legalPageSectionsFrom(value: unknown, slug: string): { heading: string; body: string }[] {
+  const src = isPlainObject(value) ? value : {};
+  const named = isPlainObject(src[slug]) ? src[slug] : null;
+  if (named && Array.isArray(named.sections)) return mapLegalSections(named.sections);
+  if (Array.isArray(src.pages) && src.pages.length) {
+    const pages = src.pages.filter(isPlainObject);
+    const match = pages.find((page) => {
+      const pageSlug = String(page.slug ?? "").trim().toLowerCase();
+      const title = String(page.title ?? "").trim().toLowerCase();
+      if (pageSlug === slug) return true;
+      if (slug === "terms-and-conditions") {
+        return pageSlug === "legal" || pageSlug === "terms" || title.includes("terms");
+      }
+      if (slug === "user-acceptance") {
+        return title.includes("user acceptance") || title.includes("acceptance");
+      }
+      return false;
+    });
+    if (match && Array.isArray(match.sections)) return mapLegalSections(match.sections);
+  }
+  if (slug === "terms-and-conditions") {
+    if (Array.isArray(src.sections)) return mapLegalSections(src.sections);
+    if (isPlainObject(src.terms) && Array.isArray(src.terms.sections)) {
+      return mapLegalSections(src.terms.sections);
+    }
+  }
+  if (slug === "user-acceptance" && isPlainObject(src.userAcceptance) && Array.isArray(src.userAcceptance.sections)) {
+    return mapLegalSections(src.userAcceptance.sections);
+  }
+  return [];
+}
+
+const INTERVIEW_SCHEDULING_MAX_STEPS = 10;
+const APPLICATION_NUMBER_STEP_ID = "application-number";
+
+function clipSettingText(value: unknown, max: number) {
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
+function clipSettingMultiline(value: unknown, max: number) {
+  return String(value ?? "")
+    .replace(/\r\n/g, "\n")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, max);
+}
+
+function normalizeTimeHm(value: unknown) {
+  const raw = String(value ?? "").trim();
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(raw);
+  if (!match) return "";
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return "";
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function canonicalizeInterviewScheduling(value: unknown) {
+  const defaults = SETTINGS_DEFAULTS.admin["interview-scheduling"] as {
+    title: string;
+    subtitle: string;
+    officeHours: { days: string; start: string; end: string };
+    steps: Array<{ id: string; kind: string; body: string }>;
+  };
+  const src = isPlainObject(value) ? value : {};
+  const hoursSrc = isPlainObject(src.officeHours) ? src.officeHours : {};
+  const rawSteps = Array.isArray(src.steps) ? src.steps : defaults.steps;
+  const steps: Array<{ id: string; kind: string; body: string }> = [];
+  let locked: { id: string; kind: string; body: string } | null = null;
+  for (const raw of rawSteps) {
+    const item = isPlainObject(raw) ? raw : {};
+    const isLocked =
+      String(item.kind ?? "") === "application_number" ||
+      String(item.id ?? "") === APPLICATION_NUMBER_STEP_ID;
+    if (isLocked) {
+      if (locked) continue;
+      locked = {
+        id: APPLICATION_NUMBER_STEP_ID,
+        kind: "application_number",
+        body:
+          clipSettingMultiline(item.body, 400) ||
+          String(defaults.steps[1]?.body ?? "Present your Application Number:"),
+      };
+      steps.push(locked);
+      continue;
+    }
+    steps.push({
+      id: clipSettingText(item.id, 80) || `step-${steps.length + 1}`,
+      kind: "text",
+      body: clipSettingMultiline(item.body, 400),
+    });
+  }
+  if (!locked) {
+    const insertAt = Math.min(1, steps.length);
+    steps.splice(insertAt, 0, {
+      id: APPLICATION_NUMBER_STEP_ID,
+      kind: "application_number",
+      body: String(defaults.steps[1]?.body ?? "Present your Application Number:"),
+    });
+  }
+  while (steps.length > INTERVIEW_SCHEDULING_MAX_STEPS) {
+    const dropIndex = [...steps]
+      .map((step, index) => ({ step, index }))
+      .reverse()
+      .find((entry) => entry.step.kind === "text")?.index;
+    if (dropIndex == null) break;
+    steps.splice(dropIndex, 1);
+  }
+  const start = normalizeTimeHm(hoursSrc.start) || defaults.officeHours.start;
+  const end = normalizeTimeHm(hoursSrc.end) || defaults.officeHours.end;
+  const hoursValid = end > start;
+  return {
+    title: clipSettingText(src.title, 80) || defaults.title,
+    subtitle: clipSettingText(src.subtitle, 80) || defaults.subtitle,
+    officeHours: {
+      days: clipSettingText(hoursSrc.days, 80) || defaults.officeHours.days,
+      start: hoursValid ? start : defaults.officeHours.start,
+      end: hoursValid ? end : defaults.officeHours.end,
+    },
+    steps,
+  };
+}
+
+/** Drop identity fields for Legal. Only section copy per hardcoded page is stored. */
+function canonicalizeSettingValue(scope: string, key: string, value: unknown) {
+  if (scope === "system" && key === "legal") {
+    const next: Record<string, { sections: { heading: string; body: string }[] }> = {};
+    for (const slug of LEGAL_PAGE_SLUGS) {
+      next[slug] = { sections: legalPageSectionsFrom(value, slug) };
+    }
+    return next;
+  }
+  if (scope === "admin" && key === "interview-scheduling") {
+    return canonicalizeInterviewScheduling(value);
+  }
+  return value;
 }
 
 function mapSettingRow(row: Record<string, unknown> | null) {
@@ -250,7 +438,11 @@ Deno.serve(async (req) => {
         // No hard reject — store as-is in jsonb.
       }
 
-      const visibility = assertVisibility(body.visibility, DEFAULT_VISIBILITY[scope]);
+      const value = canonicalizeSettingValue(scope, key, body.value);
+      let visibility = assertVisibility(body.visibility, DEFAULT_VISIBILITY[scope]);
+      if (scope === "admin" && key === "interview-scheduling") {
+        visibility = "authenticated";
+      }
       const metadata = isPlainObject(body.metadata) ? body.metadata : {};
 
       const { data: existing, error: existingError } = await supabase
@@ -276,7 +468,7 @@ Deno.serve(async (req) => {
         }
 
         const patch: Record<string, unknown> = {
-          value: body.value,
+          value,
           version: Number(existing.version || 1) + 1,
           is_active: body.isActive !== false,
           visibility,
@@ -305,7 +497,7 @@ Deno.serve(async (req) => {
       const insertRow: Record<string, unknown> = {
         scope,
         key,
-        value: body.value ?? {},
+        value: value ?? {},
         description: body.description ?? null,
         visibility,
         is_secret: Boolean(body.isSecret),

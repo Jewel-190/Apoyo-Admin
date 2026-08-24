@@ -13,8 +13,15 @@ export const jsonHeaders = {
   "Content-Type": "application/json",
 };
 
-export function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: jsonHeaders });
+export function jsonResponse(
+  body: unknown,
+  status = 200,
+  extraHeaders?: Record<string, string>
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...jsonHeaders, ...extraHeaders },
+  });
 }
 
 export function preflight(req: Request): Response | null {

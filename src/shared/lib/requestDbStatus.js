@@ -7,5 +7,6 @@ export const REQUEST_DB_STATUS = {
   FOR_APPROVAL: "for approval",
   SCHEDULED: "scheduled",
   APPROVED: "approved",
+  DECLINED: "declined",
 };
 

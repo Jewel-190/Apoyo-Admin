@@ -5,7 +5,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { formatAssistanceLineTitle } from "../../../shared/lib/assistanceCategoryDisplay.js";
-import { DEFAULT_ADMIN_THEME } from "../../../shared/config/roleConfig.js";
+import { getSystemThemeSnapshot } from "../../../shared/lib/systemTheme.js";
 import {
   cmsCategoryArchive,
   cmsCategoryCreate,
@@ -57,7 +57,7 @@ function CatalogSaveProgressDialog({ open, title, verb, entityName }) {
       aria-labelledby="assistance-save-progress-title"
       aria-busy="true"
     >
-      <div className="w-full max-w-md rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_20px_45px_-24px_rgba(10,70,111,0.6)]">
+      <div className="w-full max-w-md rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_20px_45px_-24px_rgba(var(--system-primary-rgb),0.6)]">
         <div className="flex flex-col items-center px-2 py-6 text-center">
           <div
             className="size-11 animate-spin rounded-full border-[3px] border-ocean-200 border-t-ocean-600"
@@ -65,7 +65,7 @@ function CatalogSaveProgressDialog({ open, title, verb, entityName }) {
           />
           <h3 id="assistance-save-progress-title" className="mt-4 text-lg font-semibold text-ocean-950">
             {title}
-          </h3>
+            </h3>
           <p className="mt-2 text-sm leading-relaxed text-ocean-700">
             {verb}{" "}
             <span className="font-semibold text-ocean-900">&ldquo;{safeName}&rdquo;</span> to the catalog.
@@ -85,11 +85,13 @@ const slugify = (text) =>
     .replace(/(^-+|-+$)/g, "")
     .slice(0, 64);
 
-const EMPTY_FORM = {
-  assistanceName: "",
-  description: "",
-  themeColor: DEFAULT_ADMIN_THEME.primary,
-};
+function emptyForm() {
+  return {
+    assistanceName: "",
+    description: "",
+    themeColor: getSystemThemeSnapshot().primaryColor,
+  };
+}
 
 function buildThemeJsonPayload(slug, singleColor) {
   const base = normalizeThemeJsonHex(singleColor);
@@ -114,7 +116,7 @@ function pickThemeColor(themeJson, slug) {
   return (
     parseThemeAccentFromDb(themeJson) ||
     defaultAccentHexForSlug(slug) ||
-    DEFAULT_ADMIN_THEME.primary
+    getSystemThemeSnapshot().primaryColor
   );
 }
 
@@ -135,17 +137,17 @@ export function AssistanceManagement({
 }) {
   const isEdit = Boolean(category?.uuid);
 
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(emptyForm());
   const [isSaving, setIsSaving] = useState(false);
   const [savePhase, setSavePhase] = useState(null);
   const [error, setError] = useState("");
   const [archiveOpen, setArchiveOpen] = useState(false);
 
-  const reset = useCallback(() => setForm(EMPTY_FORM), []);
+  const reset = useCallback(() => setForm(emptyForm()), []);
 
   useEffect(() => {
     if (!open) return;
-    setForm(isEdit ? formFromCategory(category) : EMPTY_FORM);
+    setForm(isEdit ? formFromCategory(category) : emptyForm());
     setError("");
     setArchiveOpen(false);
     setSavePhase(null);
@@ -240,7 +242,7 @@ export function AssistanceManagement({
     <>
       <div className="fixed inset-0 z-[75] flex h-[100dvh] w-screen items-center justify-center overflow-hidden bg-ocean-950/45 p-4 backdrop-blur-[2px]">
         <div
-          className="flex max-h-[min(92vh,900px)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-ocean-200 bg-white shadow-[0_24px_60px_-24px_rgba(10,70,111,0.85)]"
+          className="flex max-h-[min(92vh,900px)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-ocean-200 bg-white shadow-[0_24px_60px_-24px_rgba(var(--system-primary-rgb),0.85)]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="assistance-modal-title"
@@ -248,20 +250,20 @@ export function AssistanceManagement({
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-ocean-100 px-5 py-3">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ocean-600">Catalog</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ocean-700">Catalog</p>
               <h3 id="assistance-modal-title" className="truncate text-lg font-semibold leading-tight text-ocean-950">
                 {isEdit ? "Edit assistance" : "Create assistance"}
-              </h3>
-            </div>
-            <button
-              type="button"
+          </h3>
+        </div>
+        <button
+          type="button"
               onClick={handleClose}
               disabled={isSaving}
               className="inline-flex h-8 shrink-0 items-center rounded-lg border border-ocean-200 bg-ocean-50 px-2.5 text-xs font-semibold text-ocean-800 transition hover:border-ocean-300 hover:bg-ocean-100 disabled:opacity-60"
-            >
-              Close
-            </button>
-          </div>
+        >
+          Close
+        </button>
+      </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
             <ModalErrorBoundary>
@@ -277,12 +279,12 @@ export function AssistanceManagement({
                     className="h-10 w-full rounded-xl border border-ocean-200 bg-ocean-50/60 px-4 text-sm font-medium text-ocean-900 outline-none focus:border-ocean-400 disabled:opacity-60"
                   />
                 </label>
-                <p className="text-xs text-ocean-600">
+                <p className="text-xs text-ocean-700">
                   Shown as <span className="font-semibold">{displayTitlePreview}</span>
                 </p>
 
                 <div className="rounded-2xl border border-ocean-100 bg-ocean-50/40 p-3.5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ocean-600">Identifier</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ocean-700">Identifier</p>
                   <p className="mt-1 text-sm font-semibold text-ocean-950">{slugPreview}</p>
                   <p className="mt-1 text-xs text-ocean-700">
                     {isEdit
@@ -304,7 +306,7 @@ export function AssistanceManagement({
                 </label>
 
                 <div className="rounded-2xl border border-ocean-100 bg-ocean-50/40 p-3.5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ocean-600">Theme</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ocean-700">Theme</p>
                   <p className="mt-1 text-xs text-ocean-700">Choose one base color.</p>
                   <div className="mt-3">
                     <label className="block space-y-1 text-xs font-semibold text-ocean-800">
@@ -327,7 +329,7 @@ export function AssistanceManagement({
                       </div>
                     </label>
                   </div>
-                </div>
+                  </div>
 
                 {isEdit ? (
                   <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-3.5">
@@ -336,8 +338,8 @@ export function AssistanceManagement({
                     </p>
                     <p className="mt-1 text-sm text-rose-800">
                       Archive sets <span className="font-semibold">active</span> to false for this category and
-                      all of its services. Archived items are hidden from the CMS and mobile app but remain in
-                      the database.
+                      all of its services. Archived items are hidden from the CMS and from new mobile
+                      applications. Existing requests, logs, and notifications keep the names they already have.
                     </p>
                     <button
                       type="button"
@@ -351,13 +353,13 @@ export function AssistanceManagement({
                 ) : null}
               </div>
             </ModalErrorBoundary>
-          </div>
+            </div>
 
           {!isSaving ? (
             <div className="shrink-0 border-t border-ocean-100 px-5 py-3">
               {error ? <p className="mb-2 text-xs font-medium text-rose-600">{error}</p> : null}
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs font-medium text-ocean-600">
+                <p className="text-xs font-medium text-ocean-700">
                   {isEdit
                     ? "Saved changes update the live catalog used by the mobile app."
                     : "After creating, add services inside this category."}
@@ -371,8 +373,8 @@ export function AssistanceManagement({
                   >
                     Cancel
                   </button>
-                  <button
-                    type="button"
+                <button
+                  type="button"
                     onClick={handleSubmit}
                     disabled={disabled}
                     className={`inline-flex h-9 items-center rounded-lg px-3.5 text-sm font-semibold text-white transition ${
@@ -380,7 +382,7 @@ export function AssistanceManagement({
                     }`}
                   >
                     {isEdit ? "Save changes" : "Create Assistance"}
-                  </button>
+                </button>
                 </div>
               </div>
             </div>

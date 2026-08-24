@@ -42,6 +42,7 @@ const MONITOR_STATUS_COLUMNS = [
   "For Approval",
   "Scheduled",
   "Approved",
+  "Declined",
 ];
 
 function formatUtcDateInput(date) {
@@ -66,6 +67,7 @@ const STATUS_ORDER = [
   "For Approval",
   "Scheduled",
   "Approved",
+  "Declined",
 ];
 
 // High-contrast, non-theme palette dedicated for service distribution readability.
@@ -93,6 +95,7 @@ function buildEmptyStatuses() {
     "For Approval": 0,
     Scheduled: 0,
     Approved: 0,
+    Declined: 0,
   };
 }
 

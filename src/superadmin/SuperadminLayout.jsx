@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
+import { useSystemTheme } from "../shared/hooks/useSystemTheme";
 import { Sidebar } from "./components/Sidebar.jsx";
 
 const MenuIcon = () => (
@@ -37,13 +38,18 @@ function isUuidSegment(value) {
   );
 }
 
+function friendlySegment(segment) {
+  if (segment === "global-settings") return "settings";
+  return segment;
+}
+
 function pathBreadcrumb(pathname) {
   const path = String(pathname || "").replace(/^\/superadmin\/?/, "");
   if (!path) return "Dashboard";
 
   const segments = path.split("/").filter(Boolean);
   // Hide raw UUID segments so detail routes don't flash the auth id in the header.
-  const visible = segments.filter((segment) => !isUuidSegment(segment));
+  const visible = segments.filter((segment) => !isUuidSegment(segment)).map(friendlySegment);
   return titleCase(visible.join("/") || "dashboard");
 }
 
@@ -51,6 +57,7 @@ export default function SuperadminLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [headerTitle, setHeaderTitle] = useState("");
+  const { cssVars: themeVars } = useSystemTheme();
 
   // Single source of truth for desktop sidebar width.
   // Update this value when you change the sidebar width.
@@ -73,6 +80,7 @@ export default function SuperadminLayout() {
       <div
         className="flex h-dvh overflow-hidden font-sans"
         style={{
+          ...themeVars,
           "--superadmin-sidebar-w": sidebarWidth,
           "--settings-toc-w": hasSettingsToc ? settingsTocWidth : "0rem",
         }}
@@ -95,7 +103,7 @@ export default function SuperadminLayout() {
               <MenuIcon />
             </button>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-ocean-600/90">
+              <p className="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-ocean-700/90">
                 {breadcrumb}
               </p>
             </div>

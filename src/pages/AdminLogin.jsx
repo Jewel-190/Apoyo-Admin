@@ -3,10 +3,9 @@
 // ============================================
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import apoyoLogoFallback from "../assets/apoyo1.png";
-import dasmaLogoFallback from "../assets/Dasma.png";
-import headphones from "../assets/headphones.png";
+import { LOGIN_HERO_URL } from "../shared/lib/staticAssets";
 import { BrandChrome } from "../shared/components/BrandChrome";
+import { SystemThemeScope } from "../shared/components/SystemThemeScope";
 import { useAuth } from "../shared/context/AuthContext";
 
 // Client-side brute-force throttle. After MAX_FAILED_ATTEMPTS consecutive
@@ -17,6 +16,13 @@ const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15_000;
 const ATTEMPTS_KEY = "apoyo_admin_login_attempts";
 const LOCK_UNTIL_KEY = "apoyo_admin_login_lock_until";
+
+const brandGradientText = {
+  fontFamily: "'Instrument Sans', sans-serif",
+  background: "var(--system-brand-gradient)",
+  WebkitBackgroundClip: "text",
+  WebkitTextFillColor: "transparent",
+};
 
 function readNumber(key) {
   try {
@@ -163,40 +169,23 @@ export default function AdminLogin() {
   const controlsDisabled = isLoading || isLocked || loading;
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <SystemThemeScope className="flex min-h-screen flex-col bg-white">
       {/* Header / Logo Bar */}
-      <div className="flex items-center gap-3 px-6 md:px-10 py-4 md:py-6">
-        <BrandChrome
-          variant="login-header"
-          fallbacks={{
-            apoyoLogo: apoyoLogoFallback,
-            apoyoBanner: apoyoLogoFallback,
-            dasmaLogo: dasmaLogoFallback,
-          }}
-        />
+      <div className="flex items-center gap-3 px-6 py-4 md:px-10 md:py-6">
+        <BrandChrome variant="login-header" />
       </div>
 
       {/* Main Content */}
-      <div className="flex flex-1 flex-col md:flex-row items-center justify-center px-6 md:px-10 gap-10 md:gap-20 py-8 md:py-0">
+      <div className="flex flex-1 flex-col items-center justify-center gap-10 px-6 py-8 md:flex-row md:gap-20 md:px-10 md:py-0">
         {/* Left - Login Form */}
         <div className="w-full max-w-sm">
-          <h2
-            className="text-3xl md:text-4xl font-bold mb-6"
-            style={{
-              fontFamily: "'Instrument Sans', sans-serif",
-              background: "linear-gradient(to right, #008B88, #87CE60)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
+          <h2 className="mb-6 text-3xl font-bold md:text-4xl" style={brandGradientText}>
             Welcome to Apoyo
           </h2>
 
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1">
-              <label className="text-sm text-gray-700 font-medium">
-                Email:
-              </label>
+              <label className="text-sm font-medium text-gray-700">Email:</label>
               <input
                 type="email"
                 placeholder="Enter Email"
@@ -205,14 +194,12 @@ export default function AdminLogin() {
                 required
                 disabled={controlsDisabled}
                 autoComplete="email"
-                className="border border-teal-500 rounded-lg px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-400 placeholder-gray-400 w-full disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="w-full rounded-lg border border-ocean-500 px-4 py-3 text-sm outline-none placeholder-gray-400 focus:ring-2 focus:ring-ocean-500 disabled:cursor-not-allowed disabled:bg-gray-100"
               />
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-sm text-gray-700 font-medium">
-                Password:
-              </label>
+              <label className="text-sm font-medium text-gray-700">Password:</label>
               <input
                 type="password"
                 placeholder="Enter Password"
@@ -221,30 +208,22 @@ export default function AdminLogin() {
                 required
                 disabled={controlsDisabled}
                 autoComplete="current-password"
-                className="border border-teal-500 rounded-lg px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-400 placeholder-gray-400 w-full disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="w-full rounded-lg border border-ocean-500 px-4 py-3 text-sm outline-none placeholder-gray-400 focus:ring-2 focus:ring-ocean-500 disabled:cursor-not-allowed disabled:bg-gray-100"
               />
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
                 <input
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
                   disabled={controlsDisabled}
-                  className="w-4 h-4 rounded border-gray-400"
+                  className="h-4 w-4 rounded border-gray-400"
                 />
                 Remember me
               </label>
-              <a
-                href="#"
-                className="text-sm font-medium"
-                style={{
-                  background: "linear-gradient(to right, #008B88, #87CE60)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                }}
-              >
+              <a href="#" className="text-sm font-medium" style={brandGradientText}>
                 Forgot Password
               </a>
             </div>
@@ -252,78 +231,55 @@ export default function AdminLogin() {
             <button
               type="submit"
               disabled={controlsDisabled}
-              className="mt-2 py-3 rounded-lg text-white font-semibold text-sm transition-all duration-300 hover:opacity-90 hover:scale-[1.02] hover:shadow-lg active:scale-95 w-full disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none"
+              className="mt-2 w-full rounded-lg py-3 text-sm font-semibold text-white transition-all duration-300 hover:opacity-90 hover:scale-[1.02] hover:shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none"
               style={{
-                background: "linear-gradient(to right, #008B88, #87CE60)",
+                background: "var(--system-brand-gradient)",
                 opacity: controlsDisabled ? 0.8 : 1,
               }}
             >
               {isLocked
                 ? `Try again in ${remainingSeconds}s`
                 : isLoading
-                ? "Logging in..."
-                : "Log In"}
+                  ? "Logging in..."
+                  : "Log In"}
             </button>
 
             {isLocked ? (
-              <p className="text-sm text-amber-600 mt-1">
+              <p className="mt-1 text-sm text-amber-600">
                 Too many failed attempts. Login is locked for {remainingSeconds}{" "}
                 second{remainingSeconds === 1 ? "" : "s"}.
               </p>
             ) : (
-              errorMessage && (
-                <p className="text-sm text-red-500 mt-1">{errorMessage}</p>
-              )
+              errorMessage && <p className="mt-1 text-sm text-red-500">{errorMessage}</p>
             )}
           </form>
         </div>
 
         {/* Right - Headphones + Tagline */}
-        <div className="flex flex-col items-center gap-4 w-full max-w-md text-center">
+        <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
           <div>
-            <h1
-              className="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight"
-              style={{
-                fontFamily: "'Instrument Sans', sans-serif",
-                background: "linear-gradient(to right, #008B88, #87CE60)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
+            <h1 className="text-2xl font-bold leading-tight md:text-3xl lg:text-4xl" style={brandGradientText}>
               Apoyo Command Center:
             </h1>
-            <h1
-              className="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight"
-              style={{
-                fontFamily: "'Instrument Sans', sans-serif",
-                background: "linear-gradient(to right, #008B88, #87CE60)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
+            <h1 className="text-2xl font-bold leading-tight md:text-3xl lg:text-4xl" style={brandGradientText}>
               Powering Public Service.
             </h1>
           </div>
-          <img
-            src={headphones}
-            alt="Headphones"
-            className="w-52 sm:w-64 md:w-80 h-auto"
-          />
+          <img src={LOGIN_HERO_URL} alt="" className="h-auto w-52 sm:w-64 md:w-80" />
         </div>
       </div>
 
       {/* Footer */}
       <div
-        className="text-center text-xs sm:text-sm px-6 md:px-10 py-6 md:py-8 max-w-xl mx-auto font-medium"
+        className="mx-auto max-w-xl px-6 py-6 text-center text-xs font-medium sm:text-sm md:px-10 md:py-8"
         style={{
           fontFamily: "'Instrument Sans', sans-serif",
-          color: "#008B88",
+          color: "var(--system-primary)",
         }}
       >
-        Welcome to the central administrative hub of Project Apoyo. Securely
-        manage applications, oversee the distribution of essential services for
-        the city of Dasmariñas.
+        Welcome to the central administrative hub of Project Apoyo. Securely manage applications,
+        oversee the distribution of essential services for the city of Dasmariñas.
       </div>
-    </div>
+    </SystemThemeScope>
   );
 }

@@ -4,11 +4,13 @@ import MiniNotifications from "../components/MiniNotifications";
 import ApplicationsListTable from "../components/ApplicationsListTable";
 import ReviewApplications from "./Applications/ReviewApplications";
 import {
-  fetchApprovedApplicationsPage,
+  fetchArchiveApplicationsPage,
   invalidateAdminPipelineCaches,
 } from "../../shared/lib/requestData";
 import { getAdminRequestStatusBadgeStyle, lineAdminInsetHairline } from "../../shared/lib/adminLineStatusStyles";
 import { useAuth } from "../../shared/context/AuthContext";
+import { collectApplicationQuerySources } from "../../shared/lib/lineServiceScope";
+import { DEFAULT_ADMIN_THEME } from "../../shared/config/roleConfig";
 import { useOpenRequestFromLocation } from "../../shared/hooks/useOpenRequestFromLocation";
 import {
   TIME_PRESET_OPTIONS,
@@ -20,6 +22,11 @@ const PAGE_SIZE = 50;
 const PAGE_SIBLING_COUNT = 1;
 const SEARCH_DEBOUNCE_MS = 350;
 const DEFAULT_TIME_PRESET = "all_time";
+const ARCHIVE_STATUS_FILTERS = [
+  { value: "all", label: "All", statuses: ["approved", "declined"] },
+  { value: "approved", label: "Approved", statuses: ["approved"] },
+  { value: "declined", label: "Declined", statuses: ["declined"] },
+];
 
 /** Compact page list that stays usable with thousands of pages: 1 … 4 5 6 … 1200 */
 function buildPageItems(currentPage, totalPages, siblingCount = PAGE_SIBLING_COUNT) {
@@ -66,7 +73,7 @@ function StatusBadge({ status }) {
   );
 }
 
-export default function Approved() {
+export default function Archive() {
   const { roleConfig } = useAuth();
   const [applications, setApplications] = useState([]);
   const [searchInput, setSearchInput] = useState("");
@@ -79,6 +86,7 @@ export default function Approved() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [activeTab, setActiveTab] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [showApprovedView, setShowApprovedView] = useState(false);
@@ -87,7 +95,7 @@ export default function Approved() {
   const loadSeqRef = useRef(0);
 
   const sourceTables = useMemo(
-    () => roleConfig?.requestSources || [],
+    () => collectApplicationQuerySources(roleConfig),
     [roleConfig]
   );
 
@@ -96,12 +104,9 @@ export default function Approved() {
     [sourceTables]
   );
 
-  const theme = roleConfig?.theme || {
-    primary: "#008B88",
-    secondary: "#06C1EC",
-  };
-  const primary = theme.primary || "#008B88";
-  const secondary = theme.secondary || "#06C1EC";
+  const theme = roleConfig?.theme || DEFAULT_ADMIN_THEME;
+  const primary = theme.primary || DEFAULT_ADMIN_THEME.primary;
+  const secondary = theme.secondary || DEFAULT_ADMIN_THEME.secondary;
 
   const activeServiceId = useMemo(() => {
     if (activeTab === "All") {
@@ -111,11 +116,14 @@ export default function Approved() {
     return match?.serviceId ? String(match.serviceId) : null;
   }, [activeTab, sourceTables]);
 
-  const canFetchApproved =
+  const canFetchArchive =
     timePreset !== "custom" || Boolean(customRangeApplied);
+  const selectedStatusFilter =
+    ARCHIVE_STATUS_FILTERS.find((option) => option.value === statusFilter) ||
+    ARCHIVE_STATUS_FILTERS[0];
 
   const resolvedTimeRange = useMemo(() => {
-    if (!canFetchApproved) {
+    if (!canFetchArchive) {
       return null;
     }
     try {
@@ -127,7 +135,7 @@ export default function Approved() {
     } catch {
       return null;
     }
-  }, [canFetchApproved, timePreset, customRangeApplied]);
+  }, [canFetchArchive, timePreset, customRangeApplied]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -169,13 +177,14 @@ export default function Approved() {
       setLoadError("");
 
       try {
-        const result = await fetchApprovedApplicationsPage({
+        const result = await fetchArchiveApplicationsPage({
           sources: sourceTables,
           serviceId: activeServiceId,
           search: debouncedSearch,
           page: safePage,
           pageSize: PAGE_SIZE,
           timeRange: resolvedTimeRange,
+          statuses: selectedStatusFilter.statuses,
         });
 
         if (requestSeq !== loadSeqRef.current) {
@@ -190,7 +199,7 @@ export default function Approved() {
         if (requestSeq !== loadSeqRef.current) {
           return;
         }
-        setLoadError(error?.message || "Failed to load approved applications.");
+        setLoadError(error?.message || "Failed to load archived applications.");
         setApplications([]);
         setTotal(0);
         setActiveRangeLabel("");
@@ -200,7 +209,7 @@ export default function Approved() {
         }
       }
     },
-    [sourceTables, activeServiceId, debouncedSearch, resolvedTimeRange]
+    [sourceTables, activeServiceId, debouncedSearch, resolvedTimeRange, selectedStatusFilter]
   );
 
   // Filter/search/range changes recreate loadApprovedPage → always restart at page 1.
@@ -218,7 +227,7 @@ export default function Approved() {
 
   const handleViewApplication = (application) => {
     if (!application?.serviceId || !application?.requestId) {
-      setLoadError("Missing request context for approved view.");
+      setLoadError("Missing request context for archive view.");
       return;
     }
 
@@ -281,7 +290,7 @@ export default function Approved() {
   };
 
   const handleReload = () => {
-    if (!canFetchApproved) {
+    if (!canFetchArchive) {
       return;
     }
     invalidateAdminPipelineCaches();
@@ -299,13 +308,19 @@ export default function Approved() {
     setActiveTab(tab);
   };
 
+  const handleStatusFilterChange = (value) => {
+    setStatusFilter(value);
+    setCurrentPage(1);
+  };
+
   if (showApprovedView && selectedApprovedApplication) {
+    const isApproved = selectedApprovedApplication.status === "Approved";
     return (
       <ReviewApplications
         application={selectedApprovedApplication}
         onBack={handleBackToApproved}
         readOnly
-        openFinalApprovalOnLoad
+        openFinalApprovalOnLoad={isApproved}
       />
     );
   }
@@ -323,7 +338,7 @@ export default function Approved() {
             placeholder="Search name, application ID, or date"
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
-            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white text-sm text-gray-500 outline-none shadow-md border border-gray-100 focus:ring-2 focus:ring-teal-300 transition-all duration-200 placeholder-gray-400"
+            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white text-sm text-gray-500 outline-none shadow-md border border-gray-100 focus:ring-2 focus:ring-[color:var(--apoyo-ring)] transition-all duration-200 placeholder-gray-400"
           />
         </div>
         <MiniNotifications />
@@ -350,18 +365,18 @@ export default function Approved() {
                     fontWeight: 500,
                   }}
                 >
-                  Approved
+                  Archive
                 </span>
                 <span className="text-gray-800"> Applications</span>
               </h1>
               <p className="text-xs text-gray-500">
                 {isLoading
-                  ? "Loading approved applications..."
-                  : canFetchApproved
+                  ? "Loading archived applications..."
+                  : canFetchArchive
                     ? total > 0
-                      ? `Showing ${formatCount(rangeStart)}–${formatCount(rangeEnd)} of ${formatCount(total)} approved`
-                      : "0 approved applications in range"
-                    : "Select a custom date range to load approved applications"}
+                      ? `Showing ${formatCount(rangeStart)}–${formatCount(rangeEnd)} of ${formatCount(total)} archived`
+                      : "0 archived applications in range"
+                    : "Select a custom date range to load archived applications"}
               </p>
             </div>
 
@@ -370,7 +385,7 @@ export default function Approved() {
               onClick={handleReload}
               className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60"
               style={{ boxShadow: lineAdminInsetHairline(theme.primary) }}
-              disabled={isLoading || !canFetchApproved}
+              disabled={isLoading || !canFetchArchive}
             >
               <RefreshCcw size={13} className={isLoading ? "animate-spin" : ""} />
               {isLoading ? "Reloading..." : "Reload"}
@@ -460,6 +475,44 @@ export default function Approved() {
             {customRangeError ? (
               <p className="text-xs text-red-600">{customRangeError}</p>
             ) : null}
+
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {ARCHIVE_STATUS_FILTERS.map((option) => {
+                const isActive = statusFilter === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleStatusFilterChange(option.value)}
+                    className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${
+                      isActive
+                        ? "text-white shadow-sm"
+                        : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                    style={
+                      isActive
+                        ? {
+                            backgroundColor:
+                              option.value === "declined"
+                                ? "#F8D0D0"
+                                : option.value === "approved"
+                                  ? "#C8F1C8"
+                                  : primary,
+                            color:
+                              option.value === "declined"
+                                ? "#7A2E2E"
+                                : option.value === "approved"
+                                  ? "#2B2B2B"
+                                  : "#FFFFFF",
+                          }
+                        : undefined
+                    }
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -486,13 +539,13 @@ export default function Approved() {
           isLoading={isLoading}
           loadError={loadError}
           emptyMessage={
-            !canFetchApproved
-              ? "Select a custom date range to load approved applications."
+            !canFetchArchive
+              ? "Select a custom date range to load archived applications."
               : debouncedSearch
-                ? "No approved applications match your search in this range."
-                : "No approved applications found in this range."
+                ? "No archived applications match your search in this range."
+                : "No archived applications found in this range."
           }
-          loadingMessage="Loading approved applications..."
+          loadingMessage="Loading archived applications..."
           actionLabel="View"
           actionColor={theme.secondary}
           onAction={handleViewApplication}

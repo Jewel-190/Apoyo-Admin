@@ -3,10 +3,8 @@
 @theme {
   --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
   /**
-   * Superadmin foundation palette — anchored on brand primary #0B8F8B (ocean-600).
-   * Lightness ramp is preserved from the previous palette so existing
-   * `from-ocean-X via-ocean-Y to-ocean-Z` gradients keep their depth, only
-   * the hue shifts to teal.
+   * Ocean scale — cold-start tokens only. bootstrapSystemTheme overwrites
+   * these `--color-ocean-*` vars on :root from the DB primary color.
    */
   --color-ocean-50: #effbfa;
   --color-ocean-100: #d8f4f3;
@@ -19,6 +17,16 @@
   --color-ocean-800: #0a5e5b;
   --color-ocean-900: #0a4a48;
   --color-ocean-950: #042b2a;
+  --system-primary: var(--color-ocean-600);
+  --system-primary-rgb: 11, 143, 139;
+  /* Same-hue accent (ocean-400) — Login/Superadmin share one family */
+  --system-accent: var(--color-ocean-400);
+  --system-brand-gradient: linear-gradient(
+    to right,
+    var(--color-ocean-700),
+    var(--color-ocean-500)
+  );
+  --system-sidebar-deep: #04201f;
 }
 
 @layer base {

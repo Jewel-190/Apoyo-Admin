@@ -9,6 +9,7 @@ const STATUS_BUCKETS = [
   "For Approval",
   "Scheduled",
   "Approved",
+  "Declined",
 ] as const;
 type StatusBucket = (typeof STATUS_BUCKETS)[number];
 const PERIOD_KEYS = ["day", "week", "month", "all_time"] as const;
@@ -87,6 +88,7 @@ function emptyStatuses(): StatusCountMap {
     "For Approval": 0,
     Scheduled: 0,
     Approved: 0,
+    Declined: 0,
   };
 }
 
@@ -137,6 +139,10 @@ function resolveStatusBucket(raw: unknown): StatusBucket {
 
   if (["approved", "complete", "done"].includes(key)) {
     return "Approved";
+  }
+
+  if (["declined", "denied", "rejected"].includes(key)) {
+    return "Declined";
   }
 
   return "Pending";
@@ -552,7 +558,6 @@ async function fetchCategories(supabase: ServiceClient): Promise<CategoryRow[]> 
   const { data, error } = await supabase
     .from("assistance_categories")
     .select("id, slug, assistance_name, sort_order, theme_json")
-    .eq("active", true)
     .order("sort_order");
 
   if (error) throw error;
@@ -563,7 +568,6 @@ async function fetchServices(supabase: ServiceClient): Promise<ServiceRow[]> {
   const { data, error } = await supabase
     .from("assistance_services")
     .select("id, category_id, display_name, sort_order")
-    .eq("active", true)
     .order("sort_order");
 
   if (error) throw error;

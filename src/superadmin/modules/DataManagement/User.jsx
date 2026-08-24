@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ChevronLeft,
@@ -28,6 +28,13 @@ import ReviewApplications from "../../../admin/modules/Applications/ReviewApplic
 import ApprovalReviewDetails from "../../../admin/modules/ForApproval/ApprovalReviewDetails";
 import { normalizeStatus } from "../../../shared/domain/status";
 import { getAdminRequestStatusBadgeStyle } from "../../../shared/lib/adminLineStatusStyles";
+import { fetchBarangays } from "../../../shared/lib/barangays";
+import { lookupRegisteredVoterByVin } from "../../../shared/lib/registeredVoters";
+import {
+  formatRegisteredVoterId,
+  REGISTERED_VOTER_ID_PATTERN,
+  validateUserProfileVoterId,
+} from "../../../shared/lib/registeredVoterValidation";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 350;
@@ -64,7 +71,7 @@ function emptyProfileForm(user) {
     contactNo: displayText(user?.contactNo, ""),
     address: displayText(user?.address, ""),
     barangay: displayText(user?.barangay, ""),
-    voterId: displayText(user?.voterId, ""),
+    voterId: formatRegisteredVoterId(displayText(user?.voterId, "")),
   };
 }
 
@@ -268,10 +275,10 @@ function UsersListView() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(10,70,111,0.7)]">
+      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">Users</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">Users</p>
             <h2 className="mt-1 text-xl font-semibold tracking-tight text-ocean-950">
               Applicant users
             </h2>
@@ -333,11 +340,11 @@ function UsersListView() {
             })}
           </div>
           {rangeLabel ? (
-            <p className="text-[11px] font-medium text-ocean-600">Viewing: {rangeLabel}</p>
+            <p className="text-[11px] font-medium text-ocean-700">Viewing: {rangeLabel}</p>
           ) : null}
           {timePreset === "custom" ? (
             <div className="flex flex-wrap items-end gap-2">
-              <label className="text-[11px] text-ocean-600">
+              <label className="text-[11px] text-ocean-700">
                 From
                 <input
                   type="date"
@@ -351,7 +358,7 @@ function UsersListView() {
                   className="mt-1 block rounded-lg border border-ocean-200 px-2 py-1.5 text-xs text-ocean-800 outline-none"
                 />
               </label>
-              <label className="text-[11px] text-ocean-600">
+              <label className="text-[11px] text-ocean-700">
                 To
                 <input
                   type="date"
@@ -383,7 +390,7 @@ function UsersListView() {
           <div className="space-y-2 md:col-span-2">
             <p className="text-xs font-semibold uppercase tracking-[0.08em] text-ocean-700">Search</p>
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ocean-400" />
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ocean-700" />
               <input
                 type="text"
                 value={searchInput}
@@ -464,19 +471,19 @@ function UsersListView() {
             <tbody className="divide-y divide-ocean-100 bg-white">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-ocean-600">
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-ocean-700">
                     Loading users…
                   </td>
                 </tr>
               ) : !canFetch ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-ocean-600">
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-ocean-700">
                     Select a custom date range to load users.
                   </td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-ocean-600">
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-ocean-700">
                     No users match the current filters.
                   </td>
                 </tr>
@@ -527,7 +534,7 @@ function UsersListView() {
 
         {!isLoading && total > 0 ? (
           <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
-            <p className="text-xs text-ocean-600">
+            <p className="text-xs text-ocean-700">
               Page {formatCount(currentPage)} of {formatCount(totalPages)}
             </p>
             <div className="flex items-center gap-1">
@@ -562,11 +569,15 @@ function UserDetailView({ userId }) {
   const [loadError, setLoadError] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [profileForm, setProfileForm] = useState(emptyProfileForm());
+  const [barangays, setBarangays] = useState([]);
   const [saveBusy, setSaveBusy] = useState(false);
   const [disableBusy, setDisableBusy] = useState(false);
   const [confirmDisable, setConfirmDisable] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
   const [actionError, setActionError] = useState("");
+  const [profileError, setProfileError] = useState("");
+  const [vinTouched, setVinTouched] = useState(false);
+  const [vinLookup, setVinLookup] = useState({ status: "idle", name: "" });
   const [viewingRequest, setViewingRequest] = useState(null);
 
   const loadDetail = useCallback(async () => {
@@ -589,9 +600,77 @@ function UserDetailView({ userId }) {
     void loadDetail();
   }, [loadDetail]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetchBarangays()
+      .then((rows) => {
+        if (!cancelled) setBarangays(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setBarangays([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const barangayOptions = useMemo(() => {
+    const names = barangays.filter((row) => row.isActive !== false).map((row) => row.name);
+    const current = displayText(profileForm.barangay, "");
+    if (current && !names.some((name) => name.toLowerCase() === current.toLowerCase())) {
+      return [...names, current];
+    }
+    return names;
+  }, [barangays, profileForm.barangay]);
+
   const user = detail?.user;
   const requests = detail?.requests || [];
   const statusCounts = detail?.statusCounts || {};
+  const originalVin = formatRegisteredVoterId(displayText(user?.voterId, ""));
+  const vinError = validateUserProfileVoterId(profileForm.voterId, originalVin);
+  const vinChanged = formatRegisteredVoterId(profileForm.voterId) !== originalVin;
+
+  useEffect(() => {
+    if (!editOpen) {
+      setVinLookup({ status: "idle", name: "" });
+      return undefined;
+    }
+    const formatted = formatRegisteredVoterId(profileForm.voterId);
+    if (!formatted) {
+      setVinLookup({ status: "idle", name: "" });
+      return undefined;
+    }
+    if (!REGISTERED_VOTER_ID_PATTERN.test(formatted)) {
+      setVinLookup({ status: "invalid", name: "" });
+      return undefined;
+    }
+
+    let cancelled = false;
+    setVinLookup({ status: "loading", name: "" });
+    const timer = window.setTimeout(() => {
+      lookupRegisteredVoterByVin(formatted)
+        .then((match) => {
+          if (cancelled) return;
+          setVinLookup(
+            match
+              ? {
+                  status: "match",
+                  name: match.fullName || "Registered voter",
+                  barangay: displayText(match.barangay, ""),
+                }
+              : { status: "miss", name: "" }
+          );
+        })
+        .catch(() => {
+          if (!cancelled) setVinLookup({ status: "idle", name: "" });
+        });
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [editOpen, profileForm.voterId]);
 
   const headerTitle = viewingRequest
     ? `Data Management · Users · ${displayText(user?.fullName, "User")} · ${displayText(
@@ -632,9 +711,16 @@ function UserDetailView({ userId }) {
 
   const handleSaveProfile = async () => {
     if (!user?.id || saveBusy) return;
+    setVinTouched(true);
+    const nextVinError = validateUserProfileVoterId(profileForm.voterId, originalVin);
+    if (nextVinError) {
+      setProfileError(nextVinError);
+      return;
+    }
     setSaveBusy(true);
     setActionError("");
     setActionMessage("");
+    setProfileError("");
     try {
       const result = await updateUserProfile(user.id, {
         firstName: displayText(profileForm.firstName, ""),
@@ -647,7 +733,7 @@ function UserDetailView({ userId }) {
         contactNo: displayText(profileForm.contactNo, ""),
         address: displayText(profileForm.address, ""),
         barangay: displayText(profileForm.barangay, ""),
-        voterId: displayText(profileForm.voterId, ""),
+        voterId: formatRegisteredVoterId(displayText(profileForm.voterId, "")),
       });
       setDetail((previous) =>
         previous
@@ -661,7 +747,9 @@ function UserDetailView({ userId }) {
       setEditOpen(false);
       setActionMessage("Profile updated.");
     } catch (error) {
-      setActionError(displayText(error?.message, "Failed to update profile."));
+      const message = displayText(error?.message, "Failed to update profile.");
+      setProfileError(message);
+      setActionError(message);
     } finally {
       setSaveBusy(false);
     }
@@ -701,7 +789,7 @@ function UserDetailView({ userId }) {
 
   if (isLoading) {
     return (
-      <div className="rounded-2xl border border-ocean-200 bg-white p-8 text-center text-sm text-ocean-600 shadow-sm">
+      <div className="rounded-2xl border border-ocean-200 bg-white p-8 text-center text-sm text-ocean-700 shadow-sm">
         Loading user profile…
       </div>
     );
@@ -757,10 +845,10 @@ function UserDetailView({ userId }) {
         </p>
       ) : null}
 
-      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(10,70,111,0.7)]">
+      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">
               User profile
             </p>
             <h2 className="mt-1 text-2xl font-semibold tracking-tight text-ocean-950">
@@ -776,6 +864,9 @@ function UserDetailView({ userId }) {
               type="button"
               onClick={() => {
                 setProfileForm(emptyProfileForm(user));
+                setProfileError("");
+                setVinTouched(false);
+                setVinLookup({ status: "idle", name: "" });
                 setEditOpen(true);
               }}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-ocean-600 px-3 text-xs font-semibold text-white hover:bg-ocean-700"
@@ -808,14 +899,14 @@ function UserDetailView({ userId }) {
               key={label}
               className="rounded-xl border border-ocean-100 bg-ocean-50/50 px-3 py-2.5"
             >
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-ocean-500">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-ocean-700">
                 {label}
               </p>
               <p className="mt-1 break-words text-sm font-medium text-ocean-900">{value}</p>
             </div>
           ))}
           <div className="rounded-xl border border-ocean-100 bg-ocean-50/50 px-3 py-2.5 sm:col-span-2 lg:col-span-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-ocean-500">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-ocean-700">
               Address
             </p>
             <p className="mt-1 break-words text-sm font-medium text-ocean-900">
@@ -825,14 +916,14 @@ function UserDetailView({ userId }) {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(10,70,111,0.7)]">
+      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">
               Account
             </p>
             <h3 className="mt-1 text-lg font-semibold text-ocean-950">Login access</h3>
-            <p className="mt-1 text-xs text-ocean-600">
+            <p className="mt-1 text-xs text-ocean-700">
               Disable blocks sign-in via Auth without deleting profile or request history.
             </p>
           </div>
@@ -867,10 +958,10 @@ function UserDetailView({ userId }) {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(10,70,111,0.7)]">
+      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">
               Service pipeline
             </p>
             <h3 className="mt-1 text-lg font-semibold text-ocean-950">
@@ -884,7 +975,7 @@ function UserDetailView({ userId }) {
 
         <div className="mt-4 flex flex-wrap gap-2">
           {Object.keys(statusCounts).length === 0 ? (
-            <span className="text-xs text-ocean-500">No status breakdown yet.</span>
+            <span className="text-xs text-ocean-700">No status breakdown yet.</span>
           ) : (
             Object.entries(statusCounts).map(([status, count]) => {
               const label = normalizeStatus(status);
@@ -933,7 +1024,7 @@ function UserDetailView({ userId }) {
             <tbody className="divide-y divide-ocean-100 bg-white">
               {requests.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-ocean-600">
+                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-ocean-700">
                     No assistance requests for this user.
                   </td>
                 </tr>
@@ -981,7 +1072,7 @@ function UserDetailView({ userId }) {
           <div className="flex min-h-full items-center justify-center">
             <div className="w-full max-w-2xl rounded-2xl border border-ocean-200 bg-white p-5 shadow-xl">
               <h3 className="text-lg font-semibold text-ocean-950">Edit profile</h3>
-              <p className="mt-1 text-xs text-ocean-600">
+              <p className="mt-1 text-xs text-ocean-700">
                 Updates `public.users` fields only. Login disable is managed separately.
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -992,8 +1083,6 @@ function UserDetailView({ userId }) {
                   ["suffix", "Suffix"],
                   ["email", "Email"],
                   ["contactNo", "Contact"],
-                  ["barangay", "Barangay"],
-                  ["voterId", "VIN"],
                 ].map(([key, label]) => (
                   <label key={key} className="text-[11px] font-semibold text-ocean-700">
                     {label}
@@ -1006,10 +1095,78 @@ function UserDetailView({ userId }) {
                           [key]: event.target.value,
                         }))
                       }
+                      maxLength={key === "suffix" ? 10 : undefined}
                       className="mt-1 h-9 w-full rounded-lg border border-ocean-200 px-2 text-xs font-medium text-ocean-900 outline-none"
                     />
                   </label>
                 ))}
+                <label className="text-[11px] font-semibold text-ocean-700 sm:col-span-2">
+                  VIN
+                  <input
+                    type="text"
+                    value={displayText(profileForm.voterId, "")}
+                    onChange={(event) => {
+                      const next = formatRegisteredVoterId(event.target.value);
+                      setProfileForm((previous) => ({ ...previous, voterId: next }));
+                      setProfileError("");
+                    }}
+                    onBlur={() => setVinTouched(true)}
+                    inputMode="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    maxLength={26}
+                    placeholder="0000-00000-0000000000000-0"
+                    aria-invalid={vinTouched && !!vinError}
+                    className={`mt-1 h-9 w-full rounded-lg border px-2 font-mono text-xs font-medium text-ocean-900 outline-none ${
+                      vinTouched && vinError ? "border-rose-300" : "border-ocean-200"
+                    }`}
+                  />
+                  <span
+                    className={`mt-1 block text-[11px] font-medium ${
+                      vinTouched && vinError ? "text-rose-600" : "text-ocean-700"
+                    }`}
+                  >
+                    {vinTouched && vinError
+                      ? vinError
+                      : vinLookup.status === "loading"
+                        ? "Checking registered voters directory…"
+                        : vinLookup.status === "match"
+                          ? `Matches directory: ${vinLookup.name}${
+                              vinLookup.barangay ? ` · ${vinLookup.barangay}` : ""
+                            }`
+                          : vinLookup.status === "miss"
+                            ? "Not in the registered voters directory. You can still save this profile VIN."
+                            : "4-5-13-1 format. Letters or digits per segment."}
+                  </span>
+                  {vinChanged ? (
+                    <span className="mt-1 block text-[11px] font-medium text-amber-800">
+                      Changing VIN updates this user profile only. The registered voters directory is not rewritten.
+                    </span>
+                  ) : null}
+                </label>
+                <label className="text-[11px] font-semibold text-ocean-700">
+                  Barangay
+                  <select
+                    value={displayText(profileForm.barangay, "")}
+                    onChange={(event) =>
+                      setProfileForm((previous) => ({
+                        ...previous,
+                        barangay: event.target.value,
+                      }))
+                    }
+                    className="mt-1 h-9 w-full rounded-lg border border-ocean-200 px-2 text-xs font-medium text-ocean-900 outline-none"
+                  >
+                    <option value="">—</option>
+                    {barangayOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-[11px] font-medium text-ocean-700">
+                    Updates this user profile only. The registered voters directory is not rewritten.
+                  </span>
+                </label>
                 <label className="text-[11px] font-semibold text-ocean-700">
                   Sex
                   <select
@@ -1056,10 +1213,20 @@ function UserDetailView({ userId }) {
                   />
                 </label>
               </div>
+              {profileError ? (
+                <p className="mt-3 text-sm font-medium text-rose-600" role="alert">
+                  {profileError}
+                </p>
+              ) : null}
               <div className="mt-5 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setEditOpen(false)}
+                  onClick={() => {
+                    if (saveBusy) return;
+                    setEditOpen(false);
+                    setProfileError("");
+                    setVinTouched(false);
+                  }}
                   disabled={saveBusy}
                   className="h-9 rounded-lg border border-ocean-200 px-3 text-xs font-semibold text-ocean-700"
                 >

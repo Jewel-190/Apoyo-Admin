@@ -6,6 +6,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import SideNavbar from "./components/SideNavbar";
 import { useAuth } from "../shared/context/AuthContext";
 import { AdminNotificationProvider } from "../shared/context/AdminNotificationContext";
+import { DEFAULT_ADMIN_THEME } from "../shared/config/roleConfig";
 
 const MenuIcon = () => (
   <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -26,17 +27,17 @@ export default function MainLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Keep in sync with SideNavbar width (w-52 = 13rem).
-  const sidebarWidth = "13rem";
+  // Keep in sync with Superadmin sidebar width (15rem).
+  const sidebarWidth = "15rem";
 
-  const palette = theme || roleConfig?.theme || {};
-  const primary = palette.primary || "#008B88";
+  const palette = theme || roleConfig?.theme || DEFAULT_ADMIN_THEME;
+  const primary = palette.primary || DEFAULT_ADMIN_THEME.primary;
   const layoutThemeVars = {
     "--apoyo-primary": primary,
-    "--apoyo-secondary": palette.secondary || "#06C1EC",
-    "--apoyo-tertiary": palette.tertiary || "#33BFB8",
-    "--apoyo-accent": palette.accent || "#87CE60",
-    "--apoyo-ring": palette.ring || "#14B8A6",
+    "--apoyo-secondary": palette.secondary || DEFAULT_ADMIN_THEME.secondary,
+    "--apoyo-tertiary": palette.tertiary || DEFAULT_ADMIN_THEME.tertiary,
+    "--apoyo-accent": palette.accent || DEFAULT_ADMIN_THEME.accent,
+    "--apoyo-ring": palette.ring || DEFAULT_ADMIN_THEME.ring,
     "--admin-sidebar-w": sidebarWidth,
   };
 

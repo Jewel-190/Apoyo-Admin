@@ -18,7 +18,7 @@ export const CATALOG_SELECT = {
     "id,category_id,display_name,request_code,description_html,mobile_image_url,sort_order,active,attachment_slot_map",
   servicesDetail:
     "id,category_id,display_name,request_code,description_html,about_html,who_bullets,mobile_image_url,reminder_text,web_intro_html,cms_metadata,radio_selection,attachment_slot_map,sort_order,active",
-  servicesAdmin: "id,category_id,display_name,sort_order,active",
+  servicesAdmin: "id,category_id,display_name,sort_order,active,attachment_slot_map",
   servicesMobile: "id,category_id,display_name,description_html,mobile_image_url,sort_order,active",
 
   requirementsList: "id,service_id,slot_key,title,help,sort_order",

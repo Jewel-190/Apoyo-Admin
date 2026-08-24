@@ -37,6 +37,7 @@ export function sortVotersForExport(voters) {
 /**
  * @param {Array<ReturnType<import("./registeredVoters").mapRegisteredVoterRow>>} voters
  * @param {{
+ *   filterBarangayName?: string;
  *   filterBarangayId?: string;
  *   filterSex?: string;
  *   filterAge?: string;
@@ -49,6 +50,7 @@ export function sortVotersForExport(voters) {
  */
 export function filterRegisteredVoterRecords(voters, filters) {
   const {
+    filterBarangayName = "",
     filterBarangayId = "",
     filterSex = "",
     filterAge = "",
@@ -59,12 +61,14 @@ export function filterRegisteredVoterRecords(voters, filters) {
     filterLastName = "",
   } = filters;
 
+  const barangayNeedle = String(filterBarangayName || "").trim().toLowerCase();
+
   return voters.filter((user) => {
-    const byBarangaySex =
-      (!filterBarangayId || user.barangayId === filterBarangayId) && (!filterSex || user.sex === filterSex);
-    const byBarangayAge =
-      (!filterBarangayId || user.barangayId === filterBarangayId) &&
-      (!filterAge || String(user.age) === String(filterAge));
+    const matchesBarangay = barangayNeedle
+      ? String(user.barangay || "").trim().toLowerCase() === barangayNeedle
+      : !filterBarangayId || user.barangayId === filterBarangayId;
+    const byBarangaySex = matchesBarangay && (!filterSex || user.sex === filterSex);
+    const byBarangayAge = matchesBarangay && (!filterAge || String(user.age) === String(filterAge));
     const byVoterBirth =
       (!filterVoterId || user.voterIdNumber === filterVoterId) &&
       (!filterBirthdate || user.birthdate === filterBirthdate);

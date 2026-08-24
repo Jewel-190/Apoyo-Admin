@@ -13,6 +13,7 @@ import { mergeRequestRow, patchRowOverride } from "../../../shared/lib/forApprov
 import { REQUEST_DB_STATUS } from "../../../shared/lib/requestDbStatus";
 import { supabase } from "../../../shared/lib/supabaseClient";
 import { useAuth } from "../../../shared/context/AuthContext";
+import { collectApplicationQuerySources } from "../../../shared/lib/lineServiceScope";
 import AdminStatusBadge from "../../components/AdminStatusBadge";
 import {
   buildLineAdminStatusBadgeStyles,
@@ -43,8 +44,10 @@ export default function CaseStudy() {
   const [selectedKey, setSelectedKey] = useState(null);
   const [approveError, setApproveError] = useState("");
   const [isApproving, setIsApproving] = useState(false);
+  const [declineError, setDeclineError] = useState("");
+  const [isDeclining, setIsDeclining] = useState(false);
 
-  const sourceTables = useMemo(() => roleConfig?.requestSources || [], [roleConfig]);
+  const sourceTables = useMemo(() => collectApplicationQuerySources(roleConfig), [roleConfig]);
 
   const tabs = useMemo(() => ["All", ...sourceTables.map((source) => source.category)], [sourceTables]);
 
@@ -147,11 +150,44 @@ export default function CaseStudy() {
       patchRowOverride(selectedApplication.key, { status: "Approved" });
       setSelectedKey(null);
       setReloadKey((k) => k + 1);
-      navigate("/admin/approved");
+      navigate("/admin/archive");
     } catch (err) {
       setApproveError(err?.message || "Failed to approve for disbursement.");
     } finally {
       setIsApproving(false);
+    }
+  };
+
+  const handleDeclineDisbursement = async () => {
+    if (!selectedApplication?.serviceId || !selectedApplication?.requestId) return;
+
+    setDeclineError("");
+    setIsDeclining(true);
+
+    try {
+      let updateQuery = supabase
+        .from("assistance_requests")
+        .update({ status: REQUEST_DB_STATUS.DECLINED })
+        .eq("id", selectedApplication.requestId);
+      if (allowedServiceIds.length > 0) {
+        updateQuery = updateQuery.in("service_id", allowedServiceIds);
+      }
+      const { error } = await updateQuery;
+
+      if (error) {
+        throw error;
+      }
+
+      invalidateAdminPipelineCaches();
+
+      patchRowOverride(selectedApplication.key, { status: "Declined" });
+      setSelectedKey(null);
+      setReloadKey((k) => k + 1);
+      navigate("/admin/archive");
+    } catch (err) {
+      setDeclineError(err?.message || "Failed to decline this request.");
+    } finally {
+      setIsDeclining(false);
     }
   };
 
@@ -163,11 +199,15 @@ export default function CaseStudy() {
         backLabel="Back to case study"
         onBack={() => {
           setApproveError("");
+          setDeclineError("");
           setSelectedKey(null);
         }}
         onApproveDisbursement={handleApproveDisbursement}
         approveError={approveError}
         isApproving={isApproving}
+        onDeclineDisbursement={handleDeclineDisbursement}
+        declineError={declineError}
+        isDeclining={isDeclining}
       />
     );
   }

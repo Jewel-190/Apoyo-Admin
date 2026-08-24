@@ -138,7 +138,7 @@ export function hasUploadedServiceIcon(src) {
 export function ServiceIconPlaceholder({ className = "size-full", iconClassName = "size-7" }) {
   return (
     <div
-      className={`flex items-center justify-center rounded-lg border border-ocean-200/80 bg-gradient-to-br from-ocean-50 via-white to-ocean-100/90 text-ocean-500 ${className}`}
+      className={`flex items-center justify-center rounded-lg border border-ocean-200/80 bg-gradient-to-br from-ocean-50 via-white to-ocean-100/90 text-ocean-700 ${className}`}
       aria-hidden
     >
       <svg
@@ -269,7 +269,7 @@ const markdownToHtml = (text = "") =>
     .replace(/~~([^~]+)~~/g, "<s>$1</s>")
     .replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/g, "<u>$1</u>")
     .replace(/`([^`]+)`/g, '<code class="rounded bg-slate-100 px-1 font-mono">$1</code>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<span class="font-semibold text-teal-700 underline">$1</span>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<span class="font-semibold text-ocean-700 underline">$1</span>')
     .replace(/_([^_]+)_/g, "<em>$1</em>")
     .replace(/\n/g, "<br>");
 
@@ -288,7 +288,7 @@ export const stripRichText = (text = "") => {
   return div.textContent || div.innerText || "";
 };
 
-const MOBILE_TEAL = "#0B8F8B";
+const MOBILE_PRIMARY = "var(--system-primary)";
 const MOBILE_TEXT_DARK = "#2B2B2B";
 const MOBILE_TEXT_MUTED = "#6B7A7A";
 const MOBILE_DANGER = "#E45454";
@@ -720,7 +720,7 @@ function SaveServiceConfirmDialog({
       aria-labelledby="save-service-confirm-title"
       aria-busy={isProcessing}
     >
-      <div className="w-full max-w-md rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_20px_45px_-24px_rgba(10,70,111,0.6)]">
+      <div className="w-full max-w-md rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_20px_45px_-24px_rgba(var(--system-primary-rgb),0.6)]">
         {isProcessing ? (
           <div className="flex flex-col items-center px-2 py-6 text-center">
             <div
@@ -789,7 +789,7 @@ function DeleteRequirementDialog({ open, requirementTitle, onClose, onConfirm })
       aria-modal="true"
       aria-labelledby="delete-requirement-title"
     >
-      <div className="w-full max-w-md rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_20px_45px_-24px_rgba(10,70,111,0.6)]">
+      <div className="w-full max-w-md rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_20px_45px_-24px_rgba(var(--system-primary-rgb),0.6)]">
         <h3 id="delete-requirement-title" className="text-lg font-semibold text-ocean-950">
           Delete requirement?
         </h3>
@@ -848,7 +848,7 @@ function WhoBulletsField({ bullets, onChange }) {
     <div className="space-y-2">
       <div>
         <p className="text-sm font-semibold text-ocean-900">Who may avail</p>
-        <p className="mt-0.5 text-xs text-ocean-600">
+        <p className="mt-0.5 text-xs text-ocean-700">
           Shown as bullets on mobile under &ldquo;Who may Avail&rdquo;.
         </p>
       </div>
@@ -1025,7 +1025,7 @@ function RequestInfoMobilePreview({
                   <div key={`who-preview-${idx}`} className="mt-2 flex items-start gap-2.5">
                     <span
                       className="mt-1.5 size-1.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: MOBILE_TEAL }}
+                      style={{ backgroundColor: MOBILE_PRIMARY }}
                       aria-hidden
                     />
                     <p className="flex-1 text-xs leading-snug" style={{ color: MOBILE_TEXT_DARK }}>
@@ -1229,7 +1229,7 @@ function RequestInfoMobilePreview({
           >
             <div
               className="flex h-[50px] items-center justify-center rounded-[25px]"
-              style={{ backgroundColor: MOBILE_TEAL }}
+              style={{ backgroundColor: MOBILE_PRIMARY }}
             >
               <span className="text-[15px] font-bold text-white">Continue</span>
             </div>
@@ -1353,7 +1353,7 @@ const RichTextField = ({
         </div>
         <div className="relative">
           {!stripRichText(value).trim() ? (
-            <span className="pointer-events-none absolute left-3 top-3 text-base font-medium text-ocean-500/80">
+            <span className="pointer-events-none absolute left-3 top-3 text-base font-medium text-ocean-700/80">
               {placeholder}
             </span>
           ) : null}
@@ -1374,7 +1374,7 @@ const RichTextField = ({
               onChange(event.currentTarget.innerHTML);
             }}
             style={{ fontFamily, minHeight: `${rows * 1.75}rem` }}
-            className="relative z-[1] w-full resize-none bg-transparent px-3 py-3 text-base font-medium text-ocean-900 outline-none [&_a]:font-semibold [&_a]:text-teal-700 [&_a]:underline [&_ol]:ml-5 [&_ol]:list-decimal [&_ul]:ml-5 [&_ul]:list-disc"
+            className="relative z-[1] w-full resize-none bg-transparent px-3 py-3 text-base font-medium text-ocean-900 outline-none [&_a]:font-semibold [&_a]:text-ocean-700 [&_a]:underline [&_ol]:ml-5 [&_ol]:list-decimal [&_ul]:ml-5 [&_ul]:list-disc"
           />
         </div>
       </div>
@@ -1437,7 +1437,7 @@ export function ArchiveConfirmDialog({
       aria-modal="true"
       aria-labelledby="archive-confirm-title"
     >
-      <div className="w-full max-w-lg rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_20px_45px_-24px_rgba(10,70,111,0.6)]">
+      <div className="w-full max-w-lg rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_20px_45px_-24px_rgba(var(--system-primary-rgb),0.6)]">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-600">
@@ -1471,9 +1471,12 @@ export function ArchiveConfirmDialog({
               <ul className="mt-3 list-disc space-y-1 pl-5 text-rose-800">
                 <li>
                   Archive sets <span className="font-semibold">active</span> to false — the row stays in the
-                  database but is hidden from the CMS and mobile app.
+                  database but is hidden from the CMS and from new mobile applications.
                 </li>
-                <li>Existing applications in the admin panel are not deleted, but new applicants cannot select this {isCategory ? "category" : "service"}.</li>
+                <li>
+                  Existing applications, activity logs, and notifications keep the assistance/service
+                  names they already have. They are not deleted or rewritten.
+                </li>
                 <li>Super admins can restore only by re-activating records in the database.</li>
               </ul>
             </div>
@@ -1652,7 +1655,10 @@ const WebAssistancePreview = ({ formData, mode = "assistance", large = false }) 
                 placeholderIconClassName="size-8"
               />
             </div>
-            <h3 className="bg-gradient-to-r from-teal-700 via-cyan-600 to-lime-500 bg-clip-text text-4xl font-extrabold leading-tight text-transparent">
+            <h3
+              className="bg-clip-text text-4xl font-extrabold leading-tight text-transparent"
+              style={{ backgroundImage: "var(--system-brand-gradient)" }}
+            >
               {assistanceTitle}
             </h3>
           </div>
@@ -1664,7 +1670,7 @@ const WebAssistancePreview = ({ formData, mode = "assistance", large = false }) 
                 href={formData.webMapLink}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-teal-700 shadow-sm transition hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-ocean-700 shadow-sm transition hover:bg-slate-50"
               >
                 {mapLabel}
                 <span className="text-slate-400">↗</span>
@@ -1720,7 +1726,7 @@ export const LARGE_MODAL_OVERLAY_CLASS =
 export const SERVICE_MODAL_MAX_WIDTH_CLASS = "max-w-7xl";
 
 export const LARGE_MODAL_PANEL_CLASS =
-  `flex max-h-[min(92vh,880px)] w-full ${SERVICE_MODAL_MAX_WIDTH_CLASS} flex-col overflow-hidden rounded-2xl border border-ocean-200 bg-white shadow-[0_24px_60px_-24px_rgba(10,70,111,0.85)]`;
+  `flex max-h-[min(92vh,880px)] w-full ${SERVICE_MODAL_MAX_WIDTH_CLASS} flex-col overflow-hidden rounded-2xl border border-ocean-200 bg-white shadow-[0_24px_60px_-24px_rgba(var(--system-primary-rgb),0.85)]`;
 
 export function AddAssistanceForm({
   mode = "assistance",
@@ -1857,7 +1863,7 @@ export function AddAssistanceForm({
               }
               className="h-10 w-full rounded-lg border border-ocean-200 bg-ocean-50/60 px-3 text-sm font-medium uppercase tracking-wide text-ocean-900 outline-none placeholder:normal-case placeholder:tracking-normal placeholder:text-ocean-500/80 focus:border-ocean-400"
             />
-            <span className="block text-xs font-normal text-ocean-600">
+            <span className="block text-xs font-normal text-ocean-700">
               Prefix only (2–6 letters or numbers). Month, year, and sequence are assigned automatically
               (e.g. FIN-0526-000042).
             </span>
@@ -1950,7 +1956,7 @@ export function AddAssistanceForm({
                         <Trash2 className="size-4" aria-hidden />
                       </button>
                     </div>
-                    <p className="mt-1 text-[11px] leading-relaxed text-ocean-600">
+                    <p className="mt-1 text-[11px] leading-relaxed text-ocean-700">
                       Requirement title: the exact document or proof the applicant must submit.
                     </p>
                     <input
@@ -1965,7 +1971,7 @@ export function AddAssistanceForm({
                           : "border-ocean-200"
                       }`}
                     />
-                    <p className="mt-2 text-[11px] leading-relaxed text-ocean-600">
+                    <p className="mt-2 text-[11px] leading-relaxed text-ocean-700">
                       Help note: short plain-text instruction shown to guide the applicant.
                     </p>
                     <input
@@ -1977,7 +1983,7 @@ export function AddAssistanceForm({
                     />
 
                     <div className="mt-2 space-y-2">
-                      <p className="text-[11px] leading-relaxed text-ocean-600">
+                      <p className="text-[11px] leading-relaxed text-ocean-700">
                         Tips: optional quick pointers (where to get it, what format is accepted, etc.).
                       </p>
                       {(item.tips ?? []).map((tip, tipIndex) => (
@@ -2033,7 +2039,7 @@ export function AddAssistanceForm({
                           </button>
                         ) : null}
                       </div>
-                      <p className="text-[11px] font-medium leading-relaxed text-ocean-600">
+                      <p className="text-[11px] font-medium leading-relaxed text-ocean-700">
                         Optional preview image so applicants can see an example of this requirement.
                       </p>
                       <input
@@ -2208,7 +2214,7 @@ export function AddAssistanceForm({
                 );
               })}
             </div>
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">
               {previewMode === "mobile" ? "Sample Mobile Preview" : "Sample Web Preview"}
             </span>
           </div>
@@ -2317,10 +2323,10 @@ export function AddAssistanceForm({
 
       {webPreviewOpen ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-6xl overflow-y-auto rounded-3xl border border-ocean-200 bg-white p-4 shadow-[0_20px_45px_-24px_rgba(10,70,111,0.6)] max-h-[92vh]">
+          <div className="w-full max-w-6xl overflow-y-auto rounded-3xl border border-ocean-200 bg-white p-4 shadow-[0_20px_45px_-24px_rgba(var(--system-primary-rgb),0.6)] max-h-[92vh]">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">Web preview</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">Web preview</p>
                 <p className="mt-1 text-lg font-semibold text-ocean-950">Assistance page</p>
               </div>
               <button
@@ -2375,13 +2381,13 @@ export function AddAssistanceForm({
               aria-live="polite"
               aria-busy="true"
             >
-              <div className="flex flex-col items-center gap-3 rounded-xl border border-ocean-200 bg-white px-6 py-5 shadow-[0_12px_30px_-20px_rgba(10,70,111,0.45)]">
+              <div className="flex flex-col items-center gap-3 rounded-xl border border-ocean-200 bg-white px-6 py-5 shadow-[0_12px_30px_-20px_rgba(var(--system-primary-rgb),0.45)]">
                 <div
                   className="size-9 animate-spin rounded-full border-[3px] border-ocean-200 border-t-ocean-600"
                   aria-hidden
                 />
                 <p className="text-sm font-semibold text-ocean-950">Loading full service details…</p>
-                <p className="max-w-xs text-center text-xs leading-relaxed text-ocean-600">
+                <p className="max-w-xs text-center text-xs leading-relaxed text-ocean-700">
                   Title and icon are shown from the list. Requirements and settings follow in a moment.
                 </p>
               </div>
@@ -2398,10 +2404,10 @@ export function AddAssistanceForm({
   }
 
   return (
-    <section className="rounded-xl border border-ocean-200 bg-white p-4 shadow-[0_12px_30px_-24px_rgba(10,70,111,0.7)]">
+    <section className="rounded-xl border border-ocean-200 bg-white p-4 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">
             {mode === "service" ? "Create Service" : "Create Assistance"}
           </p>
           <h3 className="mt-1 text-lg font-semibold tracking-tight text-ocean-950">

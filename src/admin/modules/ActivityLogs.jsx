@@ -3,6 +3,7 @@ import { Search, RefreshCcw, Eye, ChevronLeft, ChevronRight } from "lucide-react
 import MiniNotifications from "../components/MiniNotifications";
 import ReviewApplications from "./Applications/ReviewApplications";
 import { useAuth } from "../../shared/context/AuthContext";
+import { DEFAULT_ADMIN_THEME } from "../../shared/config/roleConfig";
 import { getAdminActivityLogBorderColor } from "../../shared/lib/adminLineStatusStyles";
 import { supabase } from "../../shared/lib/supabaseClient";
 import {
@@ -178,7 +179,7 @@ async function fetchApplicationForActivityLog(requestId, allowedServiceIds) {
 
   let reqQuery = supabase
     .from("assistance_requests")
-    .select("id, request_code, user_id, created_at, submitted_at, status, service_id")
+    .select("id, request_code, user_id, created_at, submitted_at, status, service_id, service_name")
     .eq("id", requestId);
 
   if (allowedServiceIds.length > 0) {
@@ -203,7 +204,7 @@ async function fetchApplicationForActivityLog(requestId, allowedServiceIds) {
 
   const sourceMeta = {
     serviceId: requestRow.service_id,
-    category: svcRow?.display_name || "Request",
+    category: requestRow.service_name || svcRow?.display_name || "Request",
   };
 
   let applicantName = "Unknown Applicant";
@@ -255,8 +256,8 @@ export default function ActivityLogs() {
   const [selectedApplication, setSelectedApplication] = useState(null);
   const [openingRequestId, setOpeningRequestId] = useState(null);
 
-  const primary = theme?.primary ?? "#0D9488";
-  const secondary = theme?.secondary ?? "#14B8A6";
+  const primary = theme?.primary ?? DEFAULT_ADMIN_THEME.primary;
+  const secondary = theme?.secondary ?? DEFAULT_ADMIN_THEME.secondary;
   const cacheScopeKey = `${user?.id || "anon"}:${roleConfig?.catalogCategoryId || "all"}`;
 
   const canFetchLogs =
@@ -450,7 +451,7 @@ export default function ActivityLogs() {
             placeholder="Search this page: applicant, service, ID, action, or admin"
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white text-sm text-gray-500 outline-none shadow-md border border-gray-100 focus:ring-2 focus:ring-teal-300 transition-all duration-200 placeholder-gray-400"
+            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white text-sm text-gray-500 outline-none shadow-md border border-gray-100 focus:ring-2 focus:ring-[color:var(--apoyo-ring)] transition-all duration-200 placeholder-gray-400"
           />
         </div>
         <div className="flex items-center gap-2 shrink-0">

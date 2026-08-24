@@ -1,6 +1,8 @@
 /**
- * Catalog visibility (`active` column) is the single source of truth for live catalog rows.
- * Archive = set `active` to false (soft-delete). Live loaders must filter `.eq("active", true)`.
+ * Catalog visibility (`active` column) is the source of truth for NEW picks.
+ * Archive = set `active` to false (soft-delete). Live loaders (CMS lists, mobile home)
+ * must filter `.eq("active", true)`. Historical requests/logs/notifications keep
+ * snapshots on `assistance_requests` and must not require `active = true`.
  */
 
 /**

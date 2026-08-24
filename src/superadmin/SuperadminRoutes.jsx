@@ -7,8 +7,9 @@ import { AuditTrail } from "./modules/AuditTrail.jsx";
 import { Voters } from "./modules/DataManagement/Voters.jsx";
 import { Admins } from "./modules/DataManagement/Admins.jsx";
 import { User } from "./modules/DataManagement/User.jsx";
-import { SystemSettings } from "./modules/Accesibility/SystemSettings.jsx";
-import { ServiceSettings } from "./modules/Accesibility/ServiceSettings.jsx";
+import { ServiceLogs } from "./modules/DataManagement/ServiceLogs.jsx";
+import { SystemSettings } from "./modules/Settings/SystemSettings.jsx";
+import { ServiceSettings } from "./modules/Settings/ServiceSettings.jsx";
 import { Services } from "./modules/ContentManagement/Services.jsx";
 import { Web } from "./modules/ContentManagement/Web.jsx";
 import { DashboardPage } from "./modules/Dashboard.jsx";
@@ -37,6 +38,8 @@ export default function SuperadminRoutes() {
         <Route path="data-management/users/:userId" element={<User />} />
         <Route path="data-management/voters" element={<Voters />} />
         <Route path="data-management/admins" element={<Admins />} />
+        <Route path="data-management/service-logs" element={<ServiceLogs />} />
+        <Route path="data-management/service-logs/:requestId" element={<ServiceLogs />} />
         <Route path="data-management/user" element={<Navigate to="/superadmin/data-management/users" replace />} />
         <Route path="data-management/admin" element={<Navigate to="/superadmin/data-management/admins" replace />} />
         <Route path="profiles/users" element={<Navigate to="/superadmin/data-management/users" replace />} />

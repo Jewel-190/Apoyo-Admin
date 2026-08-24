@@ -15,7 +15,7 @@ export default function ApplicationsListTable({
   onAction,
   renderStatus,
 }) {
-  const accent = actionColor || "#0f766e";
+  const accent = actionColor || "var(--apoyo-primary)";
 
   const emptyState = (
     <p

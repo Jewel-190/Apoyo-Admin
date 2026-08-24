@@ -14,6 +14,7 @@ import {
   lineAdminInsetHairline,
 } from "../../../shared/lib/adminLineStatusStyles";
 import { useAuth } from "../../../shared/context/AuthContext";
+import { collectApplicationQuerySources } from "../../../shared/lib/lineServiceScope";
 import { useOpenRequestFromLocation } from "../../../shared/hooks/useOpenRequestFromLocation";
 
 function StatusBadge({ status }) {
@@ -40,7 +41,7 @@ export default function ActionRequired() {
   const [reloadKey, setReloadKey] = useState(0);
 
   const sourceTables = useMemo(
-    () => roleConfig?.requestSources || [],
+    () => collectApplicationQuerySources(roleConfig),
     [roleConfig]
   );
 

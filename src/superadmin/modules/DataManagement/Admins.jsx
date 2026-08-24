@@ -89,7 +89,7 @@ function CredentialModal({
     <div className="fixed inset-0 z-[60]">
       <div className="absolute inset-0 bg-slate-950/55 backdrop-blur-[2px]" aria-hidden />
       <div className="fixed left-1/2 top-1/2 z-10 w-[min(100%,32rem)] -translate-x-1/2 -translate-y-1/2 px-4 sm:px-0">
-        <div className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_24px_60px_-30px_rgba(10,70,111,0.8)]">
+        <div className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_24px_60px_-30px_rgba(var(--system-primary-rgb),0.8)]">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold tracking-tight text-ocean-950">
@@ -139,7 +139,7 @@ function CredentialModal({
               placeholder={mode === "create" ? "Minimum 8 characters" : "Leave blank to keep current password"}
             />
             {mode === "edit" ? (
-              <p className="mt-1 text-[11px] text-ocean-600">
+              <p className="mt-1 text-[11px] text-ocean-700">
                 Passwords are write-only for security reasons. Enter a new password to replace it.
               </p>
             ) : null}
@@ -278,7 +278,7 @@ function CredentialMutationLoadingModal({ open, message }) {
     <div className="fixed inset-0 z-[80]">
       <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[2px]" aria-hidden />
       <div className="fixed left-1/2 top-1/2 z-10 w-[min(100%,24rem)] -translate-x-1/2 -translate-y-1/2 px-4 sm:px-0">
-        <div className="rounded-2xl border border-ocean-200 bg-white p-5 text-center shadow-[0_24px_60px_-30px_rgba(10,70,111,0.8)]">
+        <div className="rounded-2xl border border-ocean-200 bg-white p-5 text-center shadow-[0_24px_60px_-30px_rgba(var(--system-primary-rgb),0.8)]">
         <div className="mx-auto mb-3 h-7 w-7 animate-spin rounded-full border-2 border-ocean-200 border-t-ocean-700" />
         <p className="text-sm font-semibold text-ocean-950">{message}</p>
         <p className="mt-1 text-xs text-ocean-700">Please wait...</p>
@@ -327,7 +327,7 @@ function AssistanceAdminCard({ assistance, admins, onEditAdmin, onAddAdmin }) {
   const headerTheme = resolveAssistanceHeaderTheme(assistance.slug, assistance.theme_json);
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-ocean-200 bg-white shadow-[0_14px_34px_-26px_rgba(10,70,111,0.7)]">
+    <article className="overflow-hidden rounded-2xl border border-ocean-200 bg-white shadow-[0_14px_34px_-26px_rgba(var(--system-primary-rgb),0.7)]">
       <div
         className="relative min-h-28"
         style={!banner ? { background: headerTheme.solidBackground } : undefined}
@@ -368,7 +368,7 @@ function AssistanceAdminCard({ assistance, admins, onEditAdmin, onAddAdmin }) {
 
       <div className="grid gap-5 p-4 lg:grid-cols-2">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ocean-600">Services</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ocean-700">Services</p>
           <div className="mt-2 space-y-2">
             {services.length ? (
               services.map((service) => (
@@ -394,7 +394,7 @@ function AssistanceAdminCard({ assistance, admins, onEditAdmin, onAddAdmin }) {
               </div>
 
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ocean-600">Admins</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ocean-700">Admins</p>
           <div className="mt-2 space-y-2">
             {admins.length
               ? admins.map((admin) => (
@@ -405,7 +405,7 @@ function AssistanceAdminCard({ assistance, admins, onEditAdmin, onAddAdmin }) {
                   />
                 ))
               : (
-                  <p className="rounded-xl border border-dashed border-ocean-200 bg-ocean-50/50 p-3 text-xs text-ocean-600">
+                  <p className="rounded-xl border border-dashed border-ocean-200 bg-ocean-50/50 p-3 text-xs text-ocean-700">
                     No admins assigned to this assistance yet.
                   </p>
                 )}
@@ -662,10 +662,10 @@ export function Admins() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(10,70,111,0.7)]">
+      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
         <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">Admins</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">Admins</p>
             <h2 className="mt-1 text-xl font-semibold tracking-tight text-ocean-950">
               Assistance Admin Assignment
             </h2>

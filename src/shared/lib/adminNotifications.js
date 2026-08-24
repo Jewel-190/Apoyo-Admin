@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import { FAVICON_URL } from "./staticAssets";
 import { buildDisplayName, buildNotificationDescription, formatRelativeWithTime, normalizeStatus } from "./requestData";
 import { formatAssistanceLineTitle } from "./assistanceCategoryDisplay";
 
@@ -76,7 +77,7 @@ export function shouldShowBrowserNotifications() {
  * Janitor / backfill only.
  * Live inbox delivery comes from the audit_logs trigger + Realtime.
  * This calls `admin-notifications` → `process_admin_notifications()` to:
- * - drop rows for approved / out-of-scope requests
+ * - drop rows for approved, declined, or out-of-scope requests
  * - backfill any missed upserts
  *
  * Call on login and manual Reload — not on a live polling loop.
@@ -158,7 +159,11 @@ export function scopeAdminNotifications(rows, allowedServiceIds) {
 
 export function isVisibleAdminNotification(row) {
   const statusLabel = normalizeStatus(row?.requestStatus);
-  return statusLabel !== "Approved" && statusLabel !== "Draft";
+  return (
+    statusLabel !== "Approved" &&
+    statusLabel !== "Declined" &&
+    statusLabel !== "Draft"
+  );
 }
 
 export function mapAdminNotificationForDisplay(row, sourceServiceLookup = {}) {
@@ -263,7 +268,7 @@ export function showAdminBrowserNotification(notification, { onClick } = {}) {
     const instance = new Notification(title, {
       body,
       tag: `admin-notification-${tag}`,
-      icon: "/favicon.ico",
+      icon: FAVICON_URL,
       requireInteraction: false,
     });
 
@@ -314,7 +319,7 @@ async function enrichAdminNotificationRows(list) {
 
   const { data: requests, error: reqErr } = await supabase
     .from("assistance_requests")
-    .select("id, service_id, status, request_code, user_id")
+    .select("id, service_id, status, request_code, user_id, service_name, assistance_name, category_slug, category_id")
     .in("id", requestIds);
 
   if (reqErr) {
@@ -355,7 +360,14 @@ async function enrichAdminNotificationRows(list) {
 
     servicesById = Object.fromEntries((svcRows || []).map((s) => [s.id, s]));
 
-    const catIds = [...new Set((svcRows || []).map((s) => s.category_id).filter(Boolean))];
+    const catIds = [
+      ...new Set(
+        [
+          ...(svcRows || []).map((s) => s.category_id),
+          ...(requests || []).map((r) => r.category_id),
+        ].filter(Boolean)
+      ),
+    ];
     if (catIds.length > 0) {
       const { data: catRows, error: catErr } = await supabase
         .from("assistance_categories")
@@ -375,8 +387,19 @@ async function enrichAdminNotificationRows(list) {
     const reqId = row.assistance_request_id || al.request_id || null;
     const req = reqId ? requestById[reqId] || {} : {};
     const svc = req.service_id ? servicesById[req.service_id] : null;
-    const cat = svc?.category_id ? categoriesById[svc.category_id] : null;
+    const cat = req.category_id
+      ? categoriesById[req.category_id]
+      : svc?.category_id
+        ? categoriesById[svc.category_id]
+        : null;
     const applicant = req.user_id ? usersById[req.user_id] : null;
+    const snapshotAssistance = String(req.assistance_name || "").trim();
+    const snapshotService = String(req.service_name || "").trim();
+    const assistanceCategoryName = snapshotAssistance
+      ? formatAssistanceLineTitle(snapshotAssistance)
+      : cat?.assistance_name
+        ? formatAssistanceLineTitle(cat.assistance_name)
+        : snapshotService || svc?.display_name || "Other";
 
     return {
       id: row.id,
@@ -389,10 +412,8 @@ async function enrichAdminNotificationRows(list) {
       request_table: "assistance_requests",
       request_id: reqId,
       service_id: req.service_id ?? null,
-      assistanceCategorySlug: cat?.slug ?? null,
-      assistanceCategoryName: cat?.assistance_name
-        ? formatAssistanceLineTitle(cat.assistance_name)
-        : svc?.display_name ?? "Other",
+      assistanceCategorySlug: req.category_slug || cat?.slug || null,
+      assistanceCategoryName,
       applicantName: buildDisplayName(applicant, "Applicant"),
       requestCode: req.request_code ?? null,
       requestStatus: req.status ?? null,

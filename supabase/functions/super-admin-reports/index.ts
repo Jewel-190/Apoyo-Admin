@@ -30,6 +30,7 @@ const STATUS_ORDER = [
   "For Approval",
   "Scheduled",
   "Approved",
+  "Declined",
 ] as const;
 
 const STATUS_LABELS: Record<string, string> = {
@@ -41,6 +42,7 @@ const STATUS_LABELS: Record<string, string> = {
   "for approval": "For Approval",
   scheduled: "Scheduled",
   approved: "Approved",
+  declined: "Declined",
   "case study": "Case Study",
 };
 
@@ -68,6 +70,9 @@ interface RequestRow {
   request_code: string | null;
   user_id: string | null;
   service_id: string | null;
+  category_id?: string | null;
+  service_name?: string | null;
+  assistance_name?: string | null;
   status: string | null;
   submitted_at: string | null;
   created_at: string | null;
@@ -132,6 +137,7 @@ function normalizeStatus(status: unknown): string {
   if (["for approval", "for_approval"].includes(key)) return "For Approval";
   if (key === "scheduled") return "Scheduled";
   if (["approved", "complete", "done"].includes(key)) return "Approved";
+  if (["declined", "denied", "rejected"].includes(key)) return "Declined";
   return STATUS_LABELS[key] || "Pending";
 }
 
@@ -219,7 +225,6 @@ async function fetchCategories(supabase: ServiceClient): Promise<CategoryRow[]> 
   const { data, error } = await supabase
     .from("assistance_categories")
     .select("id, slug, assistance_name, sort_order")
-    .eq("active", true)
     .order("sort_order");
   if (error) throw error;
   return (data || []) as CategoryRow[];
@@ -229,7 +234,6 @@ async function fetchServices(supabase: ServiceClient): Promise<ServiceRow[]> {
   const { data, error } = await supabase
     .from("assistance_services")
     .select("id, category_id, display_name, sort_order")
-    .eq("active", true)
     .order("sort_order");
   if (error) throw error;
   return (data || []) as ServiceRow[];
@@ -248,7 +252,7 @@ async function fetchRequests(
     const { data, error } = await supabase
       .from("assistance_requests")
       .select(
-        "id, request_code, user_id, service_id, status, submitted_at, created_at, updated_at, case_study_date"
+        "id, request_code, user_id, service_id, category_id, service_name, assistance_name, status, submitted_at, created_at, updated_at, case_study_date"
       )
       .in("service_id", serviceIds)
       .neq("status", "draft")
@@ -391,15 +395,18 @@ function buildAppRecords(
   return rows.map((row) => {
     const serviceId = String(row.service_id ?? "").trim();
     const service = serviceById.get(serviceId);
-    const categoryId = service ? String(service.category_id) : "";
+    const categoryId =
+      String(row.category_id ?? "").trim() || (service ? String(service.category_id) : "");
     const category = categoryById.get(categoryId);
+    const snapshotAssistance = String(row.assistance_name ?? "").trim();
+    const snapshotService = String(row.service_name ?? "").trim();
     return {
       requestId: row.id,
       code: row.request_code || row.id,
       applicant: namesById[String(row.user_id ?? "")] || "Unknown Applicant",
       categoryId,
-      line: category?.assistance_name || "Unassigned assistance",
-      service: service?.display_name || "Request",
+      line: snapshotAssistance || category?.assistance_name || "Unassigned assistance",
+      service: snapshotService || service?.display_name || "Request",
       status: normalizeStatus(row.status),
       submittedAt: row.submitted_at,
       updatedAt: row.updated_at,
@@ -460,6 +467,7 @@ const REPORT_TITLES: Record<string, string> = {
   service_utilization: "Service Utilization",
   master: "Applications Master List (All Assistance)",
   approved: "Approved Beneficiaries (All Assistance)",
+  declined: "Declined Requests (All Assistance)",
   admin_directory: "Admin Directory",
   audit_trail: "System Audit Trail",
 };
@@ -486,6 +494,8 @@ function reportCount(reportId: string, ctx: ReportContext): number {
       return ctx.apps.length;
     case "approved":
       return ctx.apps.filter((a) => a.status === "Approved").length;
+    case "declined":
+      return ctx.apps.filter((a) => a.status === "Declined").length;
     case "line_performance":
       return ctx.categories.length;
     case "service_utilization":
@@ -552,6 +562,30 @@ function buildReport(reportId: string, ctx: ReportContext): BuiltReport {
     };
   }
 
+  if (reportId === "declined") {
+    const declinedApps = ctx.apps.filter((a) => a.status === "Declined");
+    const rows = declinedApps.map((app) => ({
+      code: app.code,
+      applicant: app.applicant,
+      line: app.line,
+      service: app.service,
+      submitted: formatDateCell(app.submittedAt || app.createdAt),
+      declined: formatDateTimeCell(app.updatedAt || app.createdAt),
+    }));
+    return {
+      recordCount: rows.length,
+      columns: [
+        { key: "code", label: "Application ID", width: 16 },
+        { key: "applicant", label: "Applicant Name", width: 26 },
+        { key: "line", label: "Assistance", width: 20 },
+        { key: "service", label: "Service", width: 22 },
+        { key: "submitted", label: "Submitted", width: 20 },
+        { key: "declined", label: "Declined On", width: 22 },
+      ],
+      rows,
+    };
+  }
+
   if (reportId === "line_performance") {
     const byCategory = new Map<string, AppRecord[]>();
     for (const app of ctx.apps) {
@@ -576,7 +610,8 @@ function buildReport(reportId: string, ctx: ReportContext): BuiltReport {
       }
       row.total = total;
       const approved = list.filter((a) => a.status === "Approved").length;
-      row.open = total - approved;
+      const declined = list.filter((a) => a.status === "Declined").length;
+      row.open = total - approved - declined;
       row.approvalRate = `${approvalRatePct(approved, total)}%`;
       return row;
     };
@@ -594,7 +629,7 @@ function buildReport(reportId: string, ctx: ReportContext): BuiltReport {
         { key: "line", label: "Assistance", width: 24 },
         { key: "total", label: "Total", width: 12 },
         ...statusColumns,
-        { key: "open", label: "Open (non-approved)", width: 18 },
+        { key: "open", label: "Open (in pipeline)", width: 18 },
         { key: "approvalRate", label: "Approval Rate", width: 14 },
       ],
       rows,
@@ -688,8 +723,9 @@ function buildReport(reportId: string, ctx: ReportContext): BuiltReport {
 
   // platform_summary — KPI list
   const approved = ctx.apps.filter((a) => a.status === "Approved").length;
+  const declined = ctx.apps.filter((a) => a.status === "Declined").length;
   const total = ctx.apps.length;
-  const open = total - approved;
+  const open = total - approved - declined;
   const rows: Record<string, string | number>[] = [
     { metric: "Registered applicants (all time)", value: ctx.platform.registered_applicants },
     { metric: "Assistance admins (all time)", value: ctx.platform.line_admins },
@@ -697,7 +733,8 @@ function buildReport(reportId: string, ctx: ReportContext): BuiltReport {
     { metric: "Active services", value: ctx.platform.active_services },
     { metric: "Applications in range", value: total },
     { metric: "Approved in range", value: approved },
-    { metric: "Open (non-approved) in range", value: open },
+    { metric: "Declined in range", value: declined },
+    { metric: "Open (in pipeline) in range", value: open },
     { metric: "Approval rate in range", value: `${approvalRatePct(approved, total)}%` },
   ];
   return {

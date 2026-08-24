@@ -18,7 +18,8 @@ export function resolveAdminModulePathForStatus(status) {
     case "Case Study":
       return "/admin/case-study";
     case "Approved":
-      return "/admin/approved";
+    case "Declined":
+      return "/admin/archive";
     case "Pending":
     case "In Progress":
     default:

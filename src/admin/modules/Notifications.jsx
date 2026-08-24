@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, CircleAlert, RefreshCcw } from "lucide-react";
 import MiniNotifications from "../components/MiniNotifications";
 import { useAuth } from "../../shared/context/AuthContext";
+import { collectApplicationQuerySources } from "../../shared/lib/lineServiceScope";
 import {
   fetchApplicationsBySources,
   invalidateAdminPipelineCaches,
@@ -83,7 +84,7 @@ export default function Notifications() {
   const notificationsCardRef = useRef(null);
 
   const sourceTables = useMemo(
-    () => roleConfig?.requestSources || [],
+    () => collectApplicationQuerySources(roleConfig),
     [roleConfig]
   );
 
@@ -240,7 +241,7 @@ export default function Notifications() {
     [applicationsByKey, navigateToNotification]
   );
 
-  const accentColor = theme?.secondary || "var(--apoyo-secondary, #06C1EC)";
+  const accentColor = theme?.secondary || "var(--apoyo-secondary)";
 
   return (
     <div className="w-full">

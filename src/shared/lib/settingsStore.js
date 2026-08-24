@@ -33,13 +33,47 @@ export const SETTINGS_SCOPES = Object.freeze(["system", "admin", "user"]);
 export const SETTINGS_DEFAULTS = Object.freeze({
   system: {
     "logo-and-banner": {
-      apoyo_logo_url: "",
-      apoyo_banner_url: "",
       dasma_logo_url: "",
       dasma_banner_url: "",
     },
+    "system-theme": {
+      // Cold-start seed only; live color is stored in public.settings.
+      primary_color: "#0b8f8b",
+    },
+    legal: {
+      // Persist section copy per hardcoded page slug. Title/URL stay in code.
+      "terms-and-conditions": { sections: [] },
+      "user-acceptance": { sections: [] },
+    },
   },
-  admin: {},
+  admin: {
+    "interview-scheduling": {
+      title: "Instructions",
+      subtitle: "Applicant briefing",
+      officeHours: {
+        days: "Monday - Friday",
+        start: "08:00",
+        end: "17:00",
+      },
+      steps: [
+        {
+          id: "step-visit",
+          kind: "text",
+          body: "Visit the Socio-Economic and Multi-Purpose Building Barangay Burol Main, City of Dasmariñas, Cavite",
+        },
+        {
+          id: "application-number",
+          kind: "application_number",
+          body: "Present your Application Number:",
+        },
+        {
+          id: "step-valid-id",
+          kind: "text",
+          body: "Bring one (1) Original Valid ID for verification.",
+        },
+      ],
+    },
+  },
   user: {},
 });
 
@@ -114,6 +148,55 @@ export async function fetchScopeSettings(scope, { forceRefresh = false } = {}) {
   const groupIds = new Set([...Object.keys(defaults), ...stored.keys()]);
   for (const groupId of groupIds) {
     result[groupId] = mergeWithDefault(defaults[groupId], stored.get(groupId));
+    if (groupId === "legal") {
+      const merged = result[groupId] ?? {};
+      const sectionList = (raw) =>
+        (Array.isArray(raw) ? raw : []).map((section) => ({
+          heading: String(section?.heading ?? ""),
+          body: String(section?.body ?? ""),
+        }));
+      const termsFromLegacy = () => {
+        if (Array.isArray(merged.pages) && merged.pages.length) {
+          const match =
+            merged.pages.find((page) => {
+              const slug = String(page?.slug ?? "").trim().toLowerCase();
+              const title = String(page?.title ?? "").trim().toLowerCase();
+              return (
+                slug === "terms-and-conditions" ||
+                slug === "legal" ||
+                slug === "terms" ||
+                title.includes("terms")
+              );
+            }) ?? merged.pages[0];
+          return match?.sections;
+        }
+        if (Array.isArray(merged.sections)) return merged.sections;
+        return merged.terms?.sections;
+      };
+      const acceptanceFromLegacy = () => {
+        if (Array.isArray(merged.pages) && merged.pages.length) {
+          const match = merged.pages.find((page) => {
+            const slug = String(page?.slug ?? "").trim().toLowerCase();
+            const title = String(page?.title ?? "").trim().toLowerCase();
+            return slug === "user-acceptance" || title.includes("acceptance");
+          });
+          return match?.sections;
+        }
+        return merged.userAcceptance?.sections;
+      };
+      result[groupId] = {
+        "terms-and-conditions": {
+          sections: sectionList(
+            merged["terms-and-conditions"]?.sections ?? termsFromLegacy()
+          ),
+        },
+        "user-acceptance": {
+          sections: sectionList(
+            merged["user-acceptance"]?.sections ?? acceptanceFromLegacy()
+          ),
+        },
+      };
+    }
   }
   return result;
 }

@@ -51,6 +51,7 @@ interface AssistanceRequestRow {
   request_code: string | null;
   user_id: string | null;
   service_id: string;
+  service_name?: string | null;
 }
 
 interface UserNameRow {
@@ -271,6 +272,9 @@ function normalizeStatusLabel(raw: unknown): string {
   if (["approved", "complete", "done"].includes(key)) {
     return "Approved";
   }
+  if (["declined", "denied", "rejected"].includes(key)) {
+    return "Declined";
+  }
 
   if (key === "draft") {
     return "Draft";
@@ -344,7 +348,6 @@ async function fetchCatalog(supabase: ServiceClient): Promise<CatalogRow> {
   const { data: services, error } = await supabase
     .from("assistance_services")
     .select("id, category_id, display_name")
-    .eq("active", true)
     .order("sort_order");
 
   if (error) {
@@ -519,7 +522,7 @@ async function fetchRequestsByIds(
     const chunk = requestIds.slice(index, index + chunkSize);
     const { data, error } = await supabase
       .from("assistance_requests")
-      .select("id, request_code, user_id, service_id")
+      .select("id, request_code, user_id, service_id, service_name")
       .in("id", chunk);
 
     if (error) {
@@ -688,8 +691,11 @@ async function buildActivityLogsPayload(
       request_id: row.request_id,
       request_code: request?.request_code ?? null,
       applicant_name: buildApplicantName(applicant),
-      service_category: request?.service_id
-        ? serviceLabels.get(request.service_id) || request.service_id
+      service_category: request
+        ? String(request.service_name || "").trim() ||
+          (request.service_id
+            ? serviceLabels.get(request.service_id) || request.service_id
+            : "Unknown Service")
         : "Unknown Service",
       admin_email: changedBy ? adminEmails.get(changedBy) ?? null : null,
     };

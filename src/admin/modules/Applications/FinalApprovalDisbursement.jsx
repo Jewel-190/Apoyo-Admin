@@ -183,12 +183,12 @@ function FinalApprovalDisbursement({
             <h1 className="text-3xl md:text-[44px] leading-none font-semibold">
               {isRequestApproved ? (
                 <>
-                  <span className="text-teal-600">Approved Application </span>
+                  <span className="text-[color:var(--apoyo-primary)]">Approved Application </span>
                   <span className="text-cyan-500">Files</span>
                 </>
               ) : (
                 <>
-                  <span className="text-teal-600">Approve Application </span>
+                  <span className="text-[color:var(--apoyo-primary)]">Approve Application </span>
                   <span className="text-cyan-500">Files?</span>
                 </>
               )}

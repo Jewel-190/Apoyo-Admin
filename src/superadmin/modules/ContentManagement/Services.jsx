@@ -693,7 +693,7 @@ export function Services() {
               <h3 id="service-details-modal-title" className="text-lg font-semibold text-ocean-950">
                 {modalTitle}
               </h3>
-              <p className="mt-1 text-sm text-ocean-600">
+              <p className="mt-1 text-sm text-ocean-700">
                 {categoryLabel
                   ? `Configure catalog content for ${categoryLabel}. Changes apply to the mobile app after save.`
                   : "Configure service title, requirements, reminders, and previews."}
@@ -757,10 +757,10 @@ export function Services() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(10,70,111,0.7)]">
+      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">Assistance</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">Assistance</p>
             <h2 className="mt-2 text-xl font-semibold tracking-tight text-ocean-950">
               List of Active Assistance
             </h2>
@@ -774,7 +774,7 @@ export function Services() {
               <p className="mt-2 text-xs font-medium text-rose-600">{loadError}</p>
             ) : null}
             {!isLoading && !loadError ? (
-              <p className="mt-2 text-xs font-medium text-teal-700">
+              <p className="mt-2 text-xs font-medium text-ocean-700">
                 Live catalog · changes save to Database and propagate to the mobile app.
               </p>
             ) : null}
@@ -876,10 +876,10 @@ export function Services() {
       {serviceModal}
 
       {selectedAssistance ? (
-        <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(10,70,111,0.7)]">
+        <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">Services</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">Services</p>
               <h3 className="mt-2 text-xl font-semibold tracking-tight text-ocean-950">
                 Services for {selectedAssistance.assistanceName || "…"} Assistance
               </h3>

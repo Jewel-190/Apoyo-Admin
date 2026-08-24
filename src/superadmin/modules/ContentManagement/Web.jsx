@@ -2,23 +2,32 @@
 /**
  * Web Content Management
  * ----------------------
- * Superadmin CMS for the public Apoyo website (ApoyoWeb). Content is stored in a
- * single flexible Supabase table `web_content` (one jsonb row per page), which
- * doubles as the website's read endpoint.
+ * Superadmin CMS for the public Apoyo website (ApoyoWeb). Content lives in
+ * `web_content` (one jsonb row per page) and is read/written only through the
+ * `web` edge function.
  *
  * The editor is schema-driven: `WEB_SCHEMA` describes the sections and fields of
  * each page and a small set of recursive field controls render them, so almost
  * every piece of website copy/imagery is editable and rich-text capable without
  * bespoke UI per field.
  *
- * The database is the ONLY source of truth for website content — no website copy
- * is hardcoded here. This component loads each page's row from `web_content`,
- * edits it in place, and writes it back. `WEB_SCHEMA` only defines editor
- * structure (which fields exist), never content values.
+ * Persistence goes through the `web` edge function (canonicalize + superadmin
+ * auth). Product chrome that must stay Apoyo is stripped on load/save.
+ * Terms and Conditions live in platform settings (Service Settings → Legal).
+ * Official channels (About) are also shown in the Apoyo mobile app Contact Us screen.
+ * Site-wide stores one primary hex (`theme.primary_color`); ApoyoWeb derives the palette.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../../shared/lib/supabaseClient";
 import { fetchCmsCatalogList } from "../../../shared/lib/catalogFetch";
+import { listWebPages, saveWebPage } from "../../../shared/lib/webApi";
+import {
+  buildWebScale,
+  buildWebThemeCssVars,
+  isLegacySiteBrandHex,
+  normalizeHexColor,
+  pickWebTheme,
+} from "../../../shared/lib/webTheme";
 
 /* ------------------------------------------------------------------ */
 /* Rich text (lightweight markdown) helpers                            */
@@ -81,7 +90,7 @@ function applyLinePrefix(textarea, prefix, numbered = false) {
 /* Field controls                                                      */
 /* ------------------------------------------------------------------ */
 
-const LABEL_CLS = "block text-[11px] font-semibold uppercase tracking-[0.12em] text-ocean-600";
+const LABEL_CLS = "block text-[11px] font-semibold uppercase tracking-[0.12em] text-ocean-700";
 const INPUT_CLS =
   "mt-1.5 w-full rounded-lg border border-ocean-200 bg-ocean-50/60 px-3 py-2 text-sm font-medium text-ocean-900 outline-none placeholder:text-ocean-500/70 focus:border-ocean-400";
 const TOOL_BTN =
@@ -105,7 +114,7 @@ function TextField({ label, value, onChange, placeholder, hint, type = "text" })
         }}
         className={INPUT_CLS}
       />
-      {hint ? <span className="mt-1 block text-[11px] text-ocean-500">{hint}</span> : null}
+      {hint ? <span className="mt-1 block text-[11px] text-ocean-700">{hint}</span> : null}
     </label>
   );
 }
@@ -257,7 +266,7 @@ function ConfirmRemoveButton({
             <h3 id="confirm-remove-title" className="text-base font-semibold text-ocean-950">
               {title}
             </h3>
-            <p className="mt-1.5 text-sm text-ocean-600">{message}</p>
+            <p className="mt-1.5 text-sm text-ocean-700">{message}</p>
             <div className="mt-5 flex justify-end gap-2">
         <button
           type="button"
@@ -351,7 +360,7 @@ function ImageField({ label, value, onChange, accept = "image/*" }) {
   return (
     <div>
       {label ? <span className={LABEL_CLS}>{label}</span> : null}
-      <p className="mt-0.5 text-[11px] text-ocean-500">
+      <p className="mt-0.5 text-[11px] text-ocean-700">
         Any resolution is fine — the site shows it at a fixed height without stretching.
       </p>
       <div className="mt-1.5 flex items-center gap-3">
@@ -370,7 +379,7 @@ function ImageField({ label, value, onChange, accept = "image/*" }) {
           {value && !broken && !isVideo && canPreview ? (
             <img src={value} alt="" className="max-h-full max-w-full object-contain object-center" onError={() => setBroken(true)} />
           ) : value && isVideo ? (
-            <svg className="size-7 text-ocean-600" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <svg className="size-7 text-ocean-700" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
               <path d="M8 5.5v13l11-6.5L8 5.5z" />
             </svg>
           ) : value && !isVideo && !canPreview ? (
@@ -407,7 +416,7 @@ function ImageField({ label, value, onChange, accept = "image/*" }) {
               />
             ) : null}
           </div>
-          <p className="mt-1 text-[11px] text-ocean-500">
+          <p className="mt-1 text-[11px] text-ocean-700">
             {canPreview
               ? "Uploaded. Click the thumbnail to open it in a new tab."
               : isVideo
@@ -430,7 +439,7 @@ function LinkField({ label, value, onChange, placeholder, hint }) {
     <label className="block">
       {label ? <span className={LABEL_CLS}>{label}</span> : null}
       <div className="mt-1.5 flex items-center gap-2">
-        <span className="pointer-events-none -mr-9 pl-3 text-ocean-400">
+        <span className="pointer-events-none -mr-9 pl-3 text-ocean-700">
           <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
             <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5" />
             <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12 19" />
@@ -458,7 +467,7 @@ function LinkField({ label, value, onChange, placeholder, hint }) {
           Open ↗
         </a>
       </div>
-      {hint ? <span className="mt-1 block text-[11px] text-ocean-500">{hint}</span> : null}
+      {hint ? <span className="mt-1 block text-[11px] text-ocean-700">{hint}</span> : null}
     </label>
   );
 }
@@ -521,10 +530,10 @@ function RichTextField({ label, value, onChange, placeholder, rows = 3 }) {
         />
         {showPreview ? (
           <div className="border-t border-ocean-100 bg-white px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ocean-400">Preview</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ocean-700">Preview</p>
             <div
-              className="prose-sm mt-1 text-sm leading-relaxed text-ocean-800 [&_a]:text-ocean-600 [&_a]:underline"
-              dangerouslySetInnerHTML={{ __html: normalizeRichTextHtml(value) || '<span class="text-ocean-400">Nothing to preview</span>' }}
+              className="prose-sm mt-1 text-sm leading-relaxed text-ocean-800 [&_a]:text-ocean-700 [&_a]:underline"
+              dangerouslySetInnerHTML={{ __html: normalizeRichTextHtml(value) || '<span class="text-ocean-700">Nothing to preview</span>' }}
             />
           </div>
         ) : null}
@@ -653,7 +662,7 @@ function Repeater({ label, value, fields, newItem, itemTitle, onChange, defaultO
                   <span className={`transition ${open ? "rotate-90" : ""}`}>▸</span>
                   <span className="truncate">{itemTitle?.(item, idx) || `Item ${idx + 1}`}</span>
                   {pinned ? (
-                    <span className="rounded-md bg-ocean-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ocean-600">
+                    <span className="rounded-md bg-ocean-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ocean-700">
                       Always bottom
                     </span>
                   ) : null}
@@ -685,8 +694,84 @@ function Repeater({ label, value, fields, newItem, itemTitle, onChange, defaultO
   );
 }
 
+function ThemeColorField({ value, onChange }) {
+  const typed = String(value ?? "").trim();
+  const primary = normalizeHexColor(typed);
+  const pickerValue = /^#[0-9a-fA-F]{6}$/.test(typed) ? typed : primary;
+  const scale = buildWebScale(primary);
+  const previewVars = buildWebThemeCssVars(primary);
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+      <div className="rounded-xl border border-ocean-100 bg-ocean-50/40 p-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-ocean-700">Primary color</p>
+        <p className="mt-1 text-[11px] leading-snug text-ocean-700">
+          This is the only value stored. Buttons, links, washes, and navbar chrome on the
+          public site are computed from it.
+        </p>
+        <div className="mt-3 flex items-center gap-3">
+          <label className="relative size-12 shrink-0 overflow-hidden rounded-lg border border-ocean-200 bg-white shadow-sm">
+            <input
+              type="color"
+              value={pickerValue}
+              onChange={(event) => onChange(normalizeHexColor(event.target.value))}
+              className="absolute inset-0 cursor-pointer opacity-0"
+              aria-label="Pick website primary color"
+            />
+            <span className="block size-full" style={{ background: primary }} />
+          </label>
+          <input
+            type="text"
+            value={typed || primary}
+            onChange={(event) => onChange(event.target.value)}
+            onBlur={() => onChange(primary)}
+            spellCheck={false}
+            className="h-9 min-w-0 flex-1 rounded-lg border border-ocean-200 bg-white px-2.5 font-mono text-xs font-semibold uppercase text-ocean-900 outline-none transition focus:border-ocean-400 focus:ring-2 focus:ring-ocean-200/70"
+          />
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-ocean-100 bg-white p-3" style={previewVars}>
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-ocean-700">Live preview</p>
+        <div className="mt-3 flex items-center gap-2">
+          <span
+            className="inline-flex h-9 items-center rounded-full px-4 text-xs font-semibold text-white"
+            style={{ background: "var(--web-primary)" }}
+          >
+            Primary button
+          </span>
+          <span className="text-xs font-semibold" style={{ color: "var(--web-primary)" }}>
+            Link
+          </span>
+        </div>
+        <div
+          className="mt-3 h-10 rounded-lg"
+          style={{ background: "var(--web-brand-gradient)" }}
+        />
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {Object.entries(scale).map(([step, hex]) => (
+            <div key={step} className="min-w-[3.25rem] flex-1">
+              <div
+                className="h-8 rounded-md border border-black/5"
+                style={{ background: hex }}
+                title={`${step}: ${hex}`}
+              />
+              <p className="mt-1 text-center text-[10px] font-semibold text-ocean-700">{step}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-[11px] text-ocean-700">
+          Preview uses the same derivation as the public website. Publish Site-wide to apply it.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function FieldControl({ field, value, onChange }) {
   switch (field.type) {
+    case "themeColor":
+      return <ThemeColorField value={value} onChange={onChange} />;
     case "richtext":
       return <RichTextField label={field.label} value={value} onChange={onChange} placeholder={field.placeholder} rows={field.rows} />;
     case "image":
@@ -710,7 +795,7 @@ function FieldControl({ field, value, onChange }) {
               </option>
             ))}
           </select>
-          {field.hint ? <span className="mt-1 block text-[11px] text-ocean-500">{field.hint}</span> : null}
+          {field.hint ? <span className="mt-1 block text-[11px] text-ocean-700">{field.hint}</span> : null}
         </label>
       );
     case "list":
@@ -745,7 +830,12 @@ function GroupFields({ fields, value, onChange }) {
   return (
     <div className="grid gap-3">
       {fields.map((field) => {
-        const span = field.type === "group" || field.type === "repeater" || field.type === "richtext" || field.type === "list";
+        const span =
+          field.type === "group" ||
+          field.type === "repeater" ||
+          field.type === "richtext" ||
+          field.type === "list" ||
+          field.type === "themeColor";
         return (
           <div key={field.key} className={span ? "sm:col-span-2" : ""}>
             <FieldControl field={field} value={obj[field.key]} onChange={(v) => onChange({ ...obj, [field.key]: v })} />
@@ -776,35 +866,38 @@ const NUM = (key, label) => ({ key, label, type: "number" });
 const WEB_SCHEMA = {
   global: [
     {
+      id: "theme",
+      key: "theme",
+      type: "group",
+      title: "Color theme",
+      desc: "Pick one primary color. The public website derives buttons, links, washes, and chrome from it — nothing else is stored.",
+      fields: [
+        {
+          key: "primary_color",
+          type: "themeColor",
+          label: "",
+        },
+      ],
+    },
+    {
       id: "site",
       key: "site",
       type: "group",
       title: "Site metadata",
       desc: "Document-level settings for the whole site.",
-      fields: [T("title", "Browser tab title"), IMG("favicon", "Favicon")],
+      fields: [T("title", "Browser tab title")],
     },
     {
       id: "navbar",
       key: "navbar",
       type: "group",
       title: "Navbar",
-      desc: "Top navigation shown on every page.",
+      desc: "Top navigation shown on every page. The Apoyo logo is product branding and cannot be changed here.",
       fields: [
-        IMG("logoPrimary", "Primary logo"),
-        T("logoPrimaryAlt", "Primary logo alt text"),
-        IMG("logoSecondary", "Secondary logo"),
-        T("logoSecondaryAlt", "Secondary logo alt text"),
-        T("searchPlaceholder", "Search placeholder"),
-        T("openMenuAria", "Open-menu aria label"),
-        T("closeMenuAria", "Close-menu aria label"),
-        {
-          key: "links",
-          label: "Navigation links",
-          type: "repeater",
-          itemTitle: (it) => it.name || "Link",
-          newItem: { name: "", path: "/" },
-          fields: [T("name", "Label"), T("path", "Path")],
-        },
+        IMG("dasmaLogo", "Dasmariñas Logo"),
+        T("dasmaLogoAlt", "Dasmariñas Logo alt text"),
+        IMG("dasmaBanner", "Dasmariñas Banner"),
+        T("dasmaBannerAlt", "Dasmariñas Banner alt text"),
       ],
     },
     {
@@ -813,80 +906,13 @@ const WEB_SCHEMA = {
       type: "group",
       title: "Footer",
       desc: "Global footer content. Use {year} for the current year.",
-      fields: [IMG("logo", "Logo"), T("logoAlt", "Logo alt text"), RT("tagline", "Tagline"), T("copyright", "Copyright line")],
-    },
-    {
-      id: "contacts",
-      key: "contacts",
-      type: "group",
-      title: "Shared contacts",
-      desc: "Contact details reused across Home, About, and Services.",
       fields: [
-        URLF("gmailSignIn", "Gmail sign-in URL"),
-        T("cityPhoneDisplay", "City phone (display)"),
-        T("cityPhoneHref", "City phone (tel: link)"),
-        T("cityCellDisplay", "City cell (display)"),
-        T("cityCellHref", "City cell (tel: link)"),
-        T("mayorEmail", "Mayor's office email"),
-        URLF("facebookCity", "Facebook — City Gov"),
-        T("facebookCityLabel", "Facebook — City Gov (label)"),
-        URLF("facebookCswdo", "Facebook — CSWDO"),
-        T("facebookCswdoLabel", "Facebook — CSWDO (label)"),
-        URLF("facebookPagamutan", "Facebook — Pagamutan"),
-        T("facebookPagamutanLabel", "Facebook — Pagamutan (label)"),
-        URLF("facebookPanteon", "Facebook — Panteon"),
-        T("facebookPanteonLabel", "Facebook — Panteon (label)"),
-        RT("cityHallAddress", "City Hall address"),
-        RT("panteonAddress", "Panteon address"),
-        T("panteonSmart", "Panteon Smart/TNT"),
-        T("panteonGlobe", "Panteon Globe/TM"),
-        T("panteonLandline", "Panteon landline"),
-        T("panteonEmail", "Panteon email"),
-      ],
-    },
-  ],
-
-  legal: [
-    {
-      id: "terms",
-      key: "terms",
-      type: "group",
-      title: "Terms & Conditions",
-      desc: "Shown at /terms. Every section is fully rich-text editable; add or reorder sections freely.",
-      fields: [
-        T("title", "Page title"),
-        T("updated", "Updated line"),
-        T("secondaryLinkLabel", "Cross-link label"),
-        T("secondaryLinkTo", "Cross-link route"),
-        {
-          key: "sections",
-          label: "Sections",
-          type: "repeater",
-          itemTitle: (it, i) => it.heading || `Section ${i + 1}`,
-          newItem: { heading: "", body: "" },
-          fields: [T("heading", "Heading"), RT("body", "Body", { rows: 5 })],
-        },
-      ],
-    },
-    {
-      id: "privacy",
-      key: "privacy",
-      type: "group",
-      title: "Privacy Policy",
-      desc: "Shown at /privacy. Use bullet lines (- item) inside a section body for lists.",
-      fields: [
-        T("title", "Page title"),
-        T("updated", "Updated line"),
-        T("secondaryLinkLabel", "Cross-link label"),
-        T("secondaryLinkTo", "Cross-link route"),
-        {
-          key: "sections",
-          label: "Sections",
-          type: "repeater",
-          itemTitle: (it, i) => it.heading || `Section ${i + 1}`,
-          newItem: { heading: "", body: "" },
-          fields: [T("heading", "Heading"), RT("body", "Body", { rows: 5 })],
-        },
+        IMG("dasmaLogo", "Dasmariñas Logo"),
+        T("dasmaLogoAlt", "Dasmariñas Logo alt text"),
+        IMG("dasmaBanner", "Dasmariñas Banner"),
+        T("dasmaBannerAlt", "Dasmariñas Banner alt text"),
+        RT("tagline", "Tagline"),
+        T("copyright", "Copyright line"),
       ],
     },
   ],
@@ -1014,13 +1040,13 @@ const WEB_SCHEMA = {
           label: "Link cards",
           type: "repeater",
           itemTitle: (it) => it.title || "Link",
-          newItem: { title: "", desc: "", href: "", to: "", accent: "#2E7D32" },
+          newItem: { title: "", desc: "", href: "", to: "", accent: "" },
           fields: [
             T("title", "Title"),
             RT("desc", "Description"),
             URLF("href", "External URL (href)"),
             T("to", "Internal route (to)"),
-            T("accent", "Accent color"),
+            T("accent", "Accent color", { hint: "Leave blank to follow the site color theme." }),
           ],
         },
       ],
@@ -1077,7 +1103,7 @@ const WEB_SCHEMA = {
       key: "channels",
       type: "group",
       title: "Official channels",
-      desc: "Stackable groups of contact cards. Add, remove, and reorder freely. Entry kinds: text, phone, email, link (external), route (in-site). Quick links always stays at the bottom.",
+      desc: "Published on the public About page and in the Apoyo mobile app (Account → Contact Us). Stackable groups of contact cards — add, remove, and reorder freely. Text, phone, email, and external links work on both web and mobile. Route is an in-site website path only; the app shows it as text and does not navigate.",
       fields: [
         RT("heading", "Heading"),
         RT("intro", "Intro"),
@@ -1086,7 +1112,6 @@ const WEB_SCHEMA = {
           label: "Channel groups",
           type: "repeater",
           itemTitle: (it) => it.title || "Group",
-          pinBottom: (it) => isQuickLinksGroup(it),
           newItem: {
             title: "",
             entries: [{ kind: "text", label: "", body: "", href: "", style: "card" }],
@@ -1110,7 +1135,7 @@ const WEB_SCHEMA = {
                     { value: "link", label: "External link" },
                     { value: "route", label: "In-site route" },
                   ],
-                  { hint: "Controls how the entry behaves on the website." }
+                  { hint: "Controls how the entry behaves on the website and in the mobile Contact Us screen." }
                 ),
                 T("label", "Label / caption", {
                   hint: "Small caption on cards, or button text for primary/secondary styles.",
@@ -1120,7 +1145,7 @@ const WEB_SCHEMA = {
                   rows: 2,
                 }),
                 URLF("href", "URL / route (optional)", {
-                  hint: "Required for link/route. Also used as fallback display if body is empty.",
+                  hint: "Required for link. Also used as fallback display if body is empty. Route paths stay on the website only.",
                 }),
                 SEL(
                   "style",
@@ -1130,7 +1155,7 @@ const WEB_SCHEMA = {
                     { value: "primary", label: "Primary button" },
                     { value: "secondary", label: "Secondary button" },
                   ],
-                  { hint: "Buttons work best for route/link CTAs." }
+                  { hint: "Card is the usual contact row. Primary/secondary buttons work best for link CTAs on web and in the app." }
                 ),
               ],
             },
@@ -1152,8 +1177,7 @@ const PAGES = [
   { id: "home", label: "Home", hint: "Landing page" },
   { id: "services", label: "Services", hint: "Images · location · link" },
   { id: "about", label: "About", hint: "About & channels" },
-  { id: "legal", label: "Legal", hint: "Terms · Privacy" },
-  { id: "global", label: "Site-wide", hint: "Navbar · footer · contacts" },
+  { id: "global", label: "Site-wide", hint: "Theme · navbar · footer" },
 ];
 
 /**
@@ -1191,6 +1215,27 @@ function normalizeHomeDownloadContent(pageContent) {
   delete nextDownload.storeHref;
 
   return { ...pageContent, download: nextDownload };
+}
+
+function normalizeHomeQuickLinkAccents(pageContent) {
+  const items = pageContent?.quickLinks?.items;
+  if (!Array.isArray(items)) return pageContent;
+  return {
+    ...pageContent,
+    quickLinks: {
+      ...pageContent.quickLinks,
+      items: items.map((item) => {
+        if (!item || typeof item !== "object") return item;
+        const accent = String(item.accent ?? "").trim();
+        if (!accent || isLegacySiteBrandHex(accent)) return { ...item, accent: "" };
+        return item;
+      }),
+    },
+  };
+}
+
+function normalizeHomeContent(pageContent) {
+  return normalizeHomeQuickLinkAccents(normalizeHomeDownloadContent(pageContent));
 }
 
 const EMPTY_PRESENTATION = {
@@ -1292,16 +1337,6 @@ function isQuickLinksGroup(group) {
   return /^quick\s*links$/i.test(String(group.title ?? "").trim());
 }
 
-function pinQuickLinksLast(groups) {
-  const rest = [];
-  const pinned = [];
-  for (const group of groups) {
-    if (isQuickLinksGroup(group)) pinned.push(group);
-    else rest.push(group);
-  }
-  return [...rest, ...pinned];
-}
-
 function normalizeChannelGroup(group = {}) {
   const quick = isQuickLinksGroup(group);
   return {
@@ -1400,43 +1435,6 @@ function groupsFromLegacyChannels(ch = {}) {
     groups.push({ title: "Panteon / Lafuneraria de Dasmariñas", entries: panteonEntries });
   }
 
-  const ctaEntries = [];
-  if (ch.ctaServicesLabel) {
-    pushEntry(ctaEntries, {
-      kind: "route",
-      label: ch.ctaServicesLabel,
-      href: ch.ctaServicesRoute || "/services",
-      style: "primary",
-    });
-  }
-  if (ch.ctaTermsLabel) {
-    pushEntry(ctaEntries, {
-      kind: "route",
-      label: ch.ctaTermsLabel,
-      href: ch.ctaTermsRoute || "/terms",
-      style: "secondary",
-    });
-  }
-  if (ch.ctaPrivacyLabel) {
-    pushEntry(ctaEntries, {
-      kind: "route",
-      label: ch.ctaPrivacyLabel,
-      href: ch.ctaPrivacyRoute || "/privacy",
-      style: "secondary",
-    });
-  }
-  if (ch.ctaHomeLabel) {
-    pushEntry(ctaEntries, {
-      kind: "route",
-      label: ch.ctaHomeLabel,
-      href: ch.ctaHomeRoute || "/",
-      style: "secondary",
-    });
-  }
-  if (ctaEntries.length) {
-    groups.push({ id: "quickLinks", title: "Quick links", entries: ctaEntries });
-  }
-
   return groups;
 }
 
@@ -1446,8 +1444,8 @@ function normalizeAboutChannelsContent(pageContent) {
   if (!ch || typeof ch !== "object") return pageContent;
 
   const hasGroups = Array.isArray(ch.groups);
-  const groups = pinQuickLinksLast(
-    hasGroups ? ch.groups.map(normalizeChannelGroup) : groupsFromLegacyChannels(ch)
+  const groups = (hasGroups ? ch.groups.map(normalizeChannelGroup) : groupsFromLegacyChannels(ch)).filter(
+    (group) => !isQuickLinksGroup(group)
   );
 
   return {
@@ -1460,8 +1458,59 @@ function normalizeAboutChannelsContent(pageContent) {
   };
 }
 
+function normalizeNavbarBranding(navbar) {
+  const next = { ...(navbar && typeof navbar === "object" ? navbar : {}) };
+  const dasmaLogo = String(next.dasmaLogo || next.logoSecondary || "").trim();
+  const dasmaLogoAlt = String(next.dasmaLogoAlt || next.logoSecondaryAlt || "").trim();
+  const dasmaBanner = String(next.dasmaBanner || "").trim();
+  const dasmaBannerAlt = String(next.dasmaBannerAlt || "").trim();
+  delete next.logoPrimary;
+  delete next.logoPrimaryAlt;
+  delete next.logoSecondary;
+  delete next.logoSecondaryAlt;
+  delete next.links;
+  delete next.searchPlaceholder;
+  delete next.openMenuAria;
+  delete next.closeMenuAria;
+  next.dasmaLogo = dasmaLogo;
+  next.dasmaLogoAlt = dasmaLogoAlt;
+  next.dasmaBanner = dasmaBanner;
+  next.dasmaBannerAlt = dasmaBannerAlt;
+  return next;
+}
+
+function normalizeFooterBranding(footer) {
+  const next = { ...(footer && typeof footer === "object" ? footer : {}) };
+  const dasmaLogo = String(next.dasmaLogo || next.logo || "").trim();
+  const dasmaLogoAlt = String(next.dasmaLogoAlt || next.logoAlt || "").trim();
+  const dasmaBanner = String(next.dasmaBanner || "").trim();
+  const dasmaBannerAlt = String(next.dasmaBannerAlt || "").trim();
+  delete next.logo;
+  delete next.logoAlt;
+  next.dasmaLogo = dasmaLogo;
+  next.dasmaLogoAlt = dasmaLogoAlt;
+  next.dasmaBanner = dasmaBanner;
+  next.dasmaBannerAlt = dasmaBannerAlt;
+  return next;
+}
+
+function normalizeGlobalContent(pageContent) {
+  const next = { ...(pageContent ?? {}) };
+  if (next.site && typeof next.site === "object") {
+    const site = { ...next.site };
+    delete site.favicon;
+    next.site = site;
+  }
+  next.navbar = normalizeNavbarBranding(next.navbar);
+  next.footer = normalizeFooterBranding(next.footer);
+  next.theme = pickWebTheme(next.theme);
+  delete next.contacts;
+  return next;
+}
+
 function normalizePageContent(page, pageContent) {
-  if (page === "home") return normalizeHomeDownloadContent(pageContent);
+  if (page === "global") return normalizeGlobalContent(pageContent);
+  if (page === "home") return normalizeHomeContent(pageContent);
   if (page === "services") return normalizeServicesPresentationsContent(pageContent);
   if (page === "about") return normalizeAboutChannelsContent(pageContent);
   return pageContent ?? {};
@@ -1539,7 +1588,7 @@ function ServicesPresentationsEditor({ value, onChange }) {
   return (
     <div className="space-y-3">
       {catalogLoading ? (
-        <p className="text-xs text-ocean-600">Loading live assistance categories…</p>
+        <p className="text-xs text-ocean-700">Loading live assistance categories…</p>
       ) : null}
       {catalogError ? (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -1566,7 +1615,7 @@ function ServicesPresentationsEditor({ value, onChange }) {
                 >
                   <span className={`transition ${open ? "rotate-90" : ""}`}>▸</span>
                   <span className="truncate">{label}</span>
-                  <span className="rounded bg-ocean-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ocean-600">
+                  <span className="rounded bg-ocean-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ocean-700">
                     {item.catalogSlug}
                   </span>
           </button>
@@ -1594,10 +1643,10 @@ function ServicesPresentationsEditor({ value, onChange }) {
 
 function SectionCard({ section, value, onChange }) {
   return (
-        <article className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(10,70,111,0.7)]">
+        <article className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
       <header className="mb-4">
         <h3 className="text-base font-semibold tracking-tight text-ocean-950">{section.title}</h3>
-        {section.desc ? <p className="mt-0.5 text-xs text-ocean-600">{section.desc}</p> : null}
+        {section.desc ? <p className="mt-0.5 text-xs text-ocean-700">{section.desc}</p> : null}
       </header>
       {section.type === "servicesPresentations" ? (
         <ServicesPresentationsEditor value={value} onChange={onChange} />
@@ -1637,23 +1686,22 @@ export function Web() {
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError("");
-    const { data, error } = await supabase.from("web_content").select("page, content");
-    if (error) {
-      setLoadError(error.message || "Failed to load web content.");
+    try {
+      const { pages } = await listWebPages();
+      const next = {};
+      const snapshot = {};
+      for (const { id: page } of PAGES) {
+        const value = normalizePageContent(page, pages[page] ?? {});
+        next[page] = value;
+        snapshot[page] = JSON.stringify(value);
+      }
+      setContent(next);
+      savedRef.current = snapshot;
+    } catch (error) {
+      setLoadError(error?.message || "Failed to load web content.");
+    } finally {
       setLoading(false);
-      return;
     }
-    const stored = new Map((data ?? []).map((row) => [row.page, row.content]));
-    const next = {};
-    const snapshot = {};
-    for (const { id: page } of PAGES) {
-      const value = normalizePageContent(page, stored.get(page) ?? {});
-      next[page] = value;
-      snapshot[page] = JSON.stringify(value);
-    }
-    setContent(next);
-    savedRef.current = snapshot;
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -1685,19 +1733,21 @@ export function Web() {
     async (page) => {
       setSaving(true);
       setStatus(null);
-      const payload = normalizePageContent(page, content[page] ?? {});
-      const { error } = await supabase
-        .from("web_content")
-        .upsert({ page, content: payload }, { onConflict: "page" });
-      setSaving(false);
-      if (error) {
-        setStatus({ type: "error", text: error.message || "Save failed." });
-      return;
-    }
-      savedRef.current = { ...savedRef.current, [page]: JSON.stringify(payload) };
-      // force dirty recompute
-      setContent((prev) => ({ ...prev, [page]: payload }));
-      setStatus({ type: "ok", text: `${PAGES.find((p) => p.id === page)?.label ?? "Page"} content published.` });
+      try {
+        const payload = normalizePageContent(page, content[page] ?? {});
+        const saved = await saveWebPage(page, payload);
+        const next = saved.content ?? payload;
+        savedRef.current = { ...savedRef.current, [page]: JSON.stringify(next) };
+        setContent((prev) => ({ ...prev, [page]: next }));
+        setStatus({
+          type: "ok",
+          text: `${PAGES.find((p) => p.id === page)?.label ?? "Page"} content published.`,
+        });
+      } catch (error) {
+        setStatus({ type: "error", text: error?.message || "Save failed." });
+      } finally {
+        setSaving(false);
+      }
     },
     [content]
   );
@@ -1713,12 +1763,12 @@ export function Web() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(10,70,111,0.7)]">
+      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">Content Management</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">Content Management</p>
             <h2 className="mt-1 text-lg font-semibold tracking-tight text-ocean-950">Web Content</h2>
-            <p className="mt-1 max-w-2xl text-xs text-ocean-600">
+            <p className="mt-1 max-w-2xl text-xs text-ocean-700">
               Edit what appears on the public Apoyo website. Changes are saved when you publish each page.
             </p>
             </div>
@@ -1748,8 +1798,8 @@ export function Web() {
                 onClick={() => setActivePage(page.id)}
                 className={`group inline-flex flex-col rounded-xl border px-3.5 py-2 text-left transition ${
                   isActive
-                    ? "border-ocean-500 bg-ocean-600 text-white shadow-sm"
-                    : "border-ocean-200 bg-white text-ocean-800 hover:border-ocean-300 hover:bg-ocean-50"
+                    ? "border-ocean-600 bg-ocean-600 text-white shadow-sm"
+                    : "border-ocean-200 bg-white text-ocean-700 hover:border-ocean-300 hover:bg-ocean-50 hover:text-ocean-950"
                 }`}
               >
                 <span className="flex items-center gap-1.5 text-sm font-semibold">
@@ -1758,7 +1808,7 @@ export function Web() {
                     <span className={`size-1.5 rounded-full ${isActive ? "bg-white" : "bg-amber-500"}`} title="Unsaved changes" />
                   ) : null}
                 </span>
-                <span className={`text-[11px] ${isActive ? "text-white/80" : "text-ocean-500"}`}>{page.hint}</span>
+                <span className={`text-[11px] ${isActive ? "text-white/80" : "text-ocean-700"}`}>{page.hint}</span>
                 </button>
             );
           })}
@@ -1804,8 +1854,8 @@ export function Web() {
 
           {/* Sticky save bar */}
           <div className="sticky bottom-4 z-10">
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-ocean-200 bg-white/95 p-3 shadow-[0_18px_40px_-24px_rgba(10,70,111,0.9)] backdrop-blur">
-              <p className="pl-1 text-xs text-ocean-600">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-ocean-200 bg-white/95 p-3 shadow-[0_18px_40px_-24px_rgba(var(--system-primary-rgb),0.9)] backdrop-blur">
+              <p className="pl-1 text-xs text-ocean-700">
                 {dirty ? (
                   <span className="font-semibold text-amber-600">Unsaved changes on this page.</span>
                 ) : (
@@ -1849,7 +1899,7 @@ export function Web() {
               aria-hidden
             />
             <p className="mt-4 text-sm font-semibold text-ocean-950">Publishing…</p>
-            <p className="mt-1 text-xs text-ocean-600">Please wait a moment.</p>
+            <p className="mt-1 text-xs text-ocean-700">Please wait a moment.</p>
           </div>
         </div>
       ) : null}

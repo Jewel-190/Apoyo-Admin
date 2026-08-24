@@ -30,11 +30,38 @@ const USER_UPDATE_ALLOWLIST = new Set([
   "sex",
   "birth_date",
   "email",
-  "contact_no",
+  "contact_number",
   "address",
   "barangay",
-  "voter_id",
+  "voter_id_number",
 ]);
+
+function isUniqueViolation(error: unknown) {
+  const err = error as { code?: string; message?: string };
+  return err?.code === "23505" || /duplicate|unique/i.test(String(err?.message ?? ""));
+}
+
+const VOTER_ID_PATTERN = /^[0-9A-Za-z]{4}-[0-9A-Za-z]{5}-[0-9A-Za-z]{13}-[0-9A-Za-z]$/;
+
+function formatVoterId(value: unknown) {
+  const raw = String(value ?? "")
+    .replace(/[^0-9A-Za-z]/gi, "")
+    .toUpperCase()
+    .slice(0, 23);
+  if (raw.length <= 4) return raw;
+  if (raw.length <= 9) return `${raw.slice(0, 4)}-${raw.slice(4)}`;
+  if (raw.length <= 22) return `${raw.slice(0, 4)}-${raw.slice(4, 9)}-${raw.slice(9)}`;
+  return `${raw.slice(0, 4)}-${raw.slice(4, 9)}-${raw.slice(9, 22)}-${raw.slice(22)}`;
+}
+
+function normalizeProfileVoterId(value: unknown) {
+  const formatted = formatVoterId(value);
+  if (!formatted) return null;
+  if (!VOTER_ID_PATTERN.test(formatted)) {
+    throw new Error("VIN must use format 0000-00000-0000000000000-0.");
+  }
+  return formatted;
+}
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -124,6 +151,16 @@ function normalizeSexLabel(value: unknown) {
   if (upper === "F" || upper === "FEMALE") return "Female";
   if (raw === "[object Object]") return "";
   return raw;
+}
+
+/** public.users.sex is char(1). Persist M/F; API still returns Male/Female. */
+function normalizeSexStorage(value: unknown) {
+  const raw = scalarString(value);
+  if (!raw) return null;
+  const upper = raw.toUpperCase();
+  if (upper === "M" || upper === "MALE") return "M";
+  if (upper === "F" || upper === "FEMALE") return "F";
+  throw new Error("Sex must be Male or Female.");
 }
 
 function formatUtcDateLabel(date: Date) {
@@ -252,13 +289,17 @@ const MAPPED_PROFILE_KEYS = new Set([
   "birth_date",
   "email",
   "contact_no",
+  "contact_number",
   "address",
   "barangay",
   "voter_id",
+  "voter_id_number",
   "age",
   "created_at",
   "updated_at",
 ]);
+
+const SKIP_EXTRA_KEYS = new Set(["verified"]);
 
 function mapUserRow(
   row: Record<string, unknown>,
@@ -269,9 +310,8 @@ function mapUserRow(
   const disabled = isAuthUserDisabled(auth);
   const extras: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(row)) {
-    if (!MAPPED_PROFILE_KEYS.has(key)) {
-      extras[key] = value;
-    }
+    if (MAPPED_PROFILE_KEYS.has(key) || SKIP_EXTRA_KEYS.has(key)) continue;
+    extras[key] = value;
   }
   const voterId = scalarString(
     row.voter_id ?? row.vin ?? row.voter_id_number ?? row.voters_id ?? ""
@@ -470,6 +510,7 @@ function normalizeStatusLabel(raw: unknown) {
   if (key === "resubmitted") return "Resubmitted";
   if (key === "scheduled") return "Scheduled";
   if (key === "approved") return "Approved";
+  if (["declined", "denied", "rejected"].includes(key)) return "Declined";
   if (key === "pending") return "Pending";
   if (key === "draft") return "Draft";
   if (!key) return "Pending";
@@ -608,8 +649,8 @@ function applyProfileFilters(
       if (includeOptionalSearchCols) {
         parts.push(
           `email.ilike.${pattern}`,
-          `contact_no.ilike.${pattern}`,
-          `voter_id.ilike.${pattern}`,
+          `contact_number.ilike.${pattern}`,
+          `voter_id_number.ilike.${pattern}`,
           `barangay.ilike.${pattern}`
         );
       }
@@ -707,8 +748,8 @@ async function listOrExportUsers(
   }
 
   try {
-    // Prefer name-only search filters; optional cols (email/barangay) vary by schema.
-    return await runSelect(USER_SELECT, false);
+    // Live schema uses email / contact_number / voter_id_number. Fall back to names-only.
+    return await runSelect(USER_SELECT, true);
   } catch (error) {
     const message = errorMessage(error);
     const base = supabase
@@ -784,7 +825,7 @@ async function getUserDetail(
   const { data: requestRows, error: requestError } = await supabase
     .from("assistance_requests")
     .select(
-      "id, request_code, status, service_id, submitted_at, created_at, updated_at, case_study_date"
+      "id, request_code, status, service_id, service_name, assistance_name, category_id, submitted_at, created_at, updated_at, case_study_date"
     )
     .eq("user_id", userId)
     .order("submitted_at", { ascending: false, nullsFirst: false })
@@ -799,6 +840,8 @@ async function getUserDetail(
   );
 
   const requests = resolvedRequestRows.map((row) => {
+    const snapshotService = scalarString(row.service_name);
+    const snapshotAssistance = scalarString(row.assistance_name);
     const meta = metaByServiceId[String(row.service_id)] || {
       serviceName: "Service",
       assistanceName: "",
@@ -810,9 +853,11 @@ async function getUserDetail(
       status: normalizeStatusLabel(row.status),
       statusRaw: scalarString(row.status),
       serviceId: row.service_id || null,
-      serviceName: meta.serviceName,
-      assistanceName: meta.assistanceName,
-      categoryId: meta.categoryId,
+      serviceName: snapshotService || meta.serviceName,
+      assistanceName: snapshotAssistance
+        ? formatAssistanceName(snapshotAssistance)
+        : meta.assistanceName,
+      categoryId: row.category_id || meta.categoryId,
       submittedAt: row.submitted_at || null,
       createdAt: row.created_at || null,
       updatedAt: row.updated_at || null,
@@ -846,23 +891,30 @@ function buildUpdatePayload(profile: Record<string, unknown> | undefined) {
     sex: "sex",
     birthDate: "birth_date",
     email: "email",
-    contactNo: "contact_no",
+    contactNo: "contact_number",
     address: "address",
     barangay: "barangay",
-    voterId: "voter_id",
+    voterId: "voter_id_number",
   };
+
+  const emptyStringColumns = new Set([
+    "first_name",
+    "middle_name",
+    "last_name",
+    "suffix",
+    "email",
+    "contact_number",
+    "address",
+    "barangay",
+  ]);
 
   for (const [camel, column] of Object.entries(fieldMap)) {
     if (!Object.prototype.hasOwnProperty.call(input, camel)) continue;
     if (!USER_UPDATE_ALLOWLIST.has(column)) continue;
     const value = input[camel];
     if (value == null || value === "") {
-      // Keep empty strings for text name fields; null for optional blanks.
-      if (["first_name", "middle_name", "last_name", "suffix"].includes(column)) {
-        payload[column] = "";
-      } else {
-        payload[column] = null;
-      }
+      // NOT NULL text columns need "" not null; optional blanks stay empty string too.
+      payload[column] = emptyStringColumns.has(column) ? "" : null;
       continue;
     }
     const text = scalarString(value);
@@ -870,15 +922,20 @@ function buildUpdatePayload(profile: Record<string, unknown> | undefined) {
     payload[column] = text;
   }
 
+  if (Object.prototype.hasOwnProperty.call(payload, "suffix") && payload.suffix != null) {
+    payload.suffix = String(payload.suffix).slice(0, 10);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "voter_id_number")) {
+    payload.voter_id_number = normalizeProfileVoterId(payload.voter_id_number);
+  }
+
   if (Object.keys(payload).length === 0) {
     throw new Error("No valid profile fields to update.");
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, "sex") && payload.sex != null) {
-    const sex = scalarString(payload.sex);
-    if (sex.toLowerCase() === "male") payload.sex = "Male";
-    else if (sex.toLowerCase() === "female") payload.sex = "Female";
-    else payload.sex = sex || null;
+    payload.sex = normalizeSexStorage(payload.sex);
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, "birth_date") && payload.birth_date) {
@@ -895,6 +952,35 @@ async function updateUserProfileRow(
   profile: Record<string, unknown> | undefined
 ) {
   const fullPayload = buildUpdatePayload(profile);
+
+  if (Object.prototype.hasOwnProperty.call(fullPayload, "voter_id_number")) {
+    const { data: existing, error: existingError } = await supabase
+      .from("users")
+      .select("voter_id_number")
+      .eq("id", userId)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (!existing) throw new Error("User not found.");
+
+    const previous = formatVoterId(existing.voter_id_number);
+    const next = fullPayload.voter_id_number == null ? "" : formatVoterId(fullPayload.voter_id_number);
+    if (!next && previous) {
+      throw new Error("VIN cannot be cleared. Enter a valid voter ID.");
+    }
+    if (next) {
+      const { data: clashRows, error: clashError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("voter_id_number", next)
+        .neq("id", userId)
+        .limit(1);
+      if (clashError) throw clashError;
+      if (clashRows?.length) {
+        throw new Error("That VIN is already used by another user account.");
+      }
+      fullPayload.voter_id_number = next;
+    }
+  }
 
   const attemptUpdate = async (payload: Record<string, unknown>) => {
     const { data, error } = await supabase
@@ -939,6 +1025,9 @@ async function updateUserProfileRow(
   }
 
   if (error) {
+    if (isUniqueViolation(error) && payload.voter_id_number) {
+      throw new Error("That VIN is already used by another user account.");
+    }
     throw new Error(errorMessage(error) || "Failed to update profile.");
   }
   if (!data) {

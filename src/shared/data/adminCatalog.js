@@ -83,18 +83,18 @@ export async function fetchAssistanceCatalogSnapshot({
 } = {}) {
   const scope = String(cacheScopeKey || "global").trim() || "global";
   return getSessionCachedQuery(
-    `admin-catalog:active:${scope}`,
+    `admin-catalog:retention:${scope}`,
     async () => {
       const categories = await fetchStitchedAssistanceCatalog({
         supabase,
-        includeInactiveCategories: false,
-        filterActiveServices: true,
+        includeInactiveCategories: true,
+        filterActiveServices: false,
         categoriesSelect: CATALOG_SELECT.categoriesAdmin,
         servicesSelect: CATALOG_SELECT.servicesAdmin,
         requirementsSelect: CATALOG_SELECT.requirementsAdmin,
       });
 
-      const services = flattenCatalogServices(categories).filter((s) => s.active !== false);
+      const services = flattenCatalogServices(categories);
 
       return {
         categories,
@@ -192,35 +192,40 @@ export function buildCatalogRoleConfig(adminProfile, scopeKey, snapshot) {
 
   const scopeCategoryIds = resolveScopeCategoryIds(adminProfile, snapshot);
 
-  const catServices = (snapshot.services ?? []).filter(
-    (s) => scopeCategoryIds.includes(s.category_id) && s.active !== false
+  const allCatServices = (snapshot.services ?? []).filter((s) =>
+    scopeCategoryIds.includes(s.category_id)
   );
+  const catServices = allCatServices.filter((s) => s.active !== false);
 
   const themeCategory = resolveThemeCategoryRow(
     snapshot,
     adminProfile,
     scopeCategoryIds,
-    catServices
+    allCatServices
   );
 
-  const requestSources = catServices.map((s) => ({
+  const toSource = (s) => ({
     serviceId: s.id,
     category: s.display_name,
     displayName: s.display_name,
-  }));
+  });
+  const requestSources = catServices.map(toSource);
+  const querySources = allCatServices.map(toSource);
 
-  const attachmentCatalog = buildAttachmentCatalogMaps(catServices);
+  const attachmentCatalog = buildAttachmentCatalogMaps(allCatServices);
 
   return {
     ...fallback,
     title: normalizeAssistanceName(themeCategory?.assistance_name) || fallback.title,
     sessionLabel: normalizeAssistanceName(themeCategory?.assistance_name) || fallback.sessionLabel,
     requestSources,
-    serviceIds: requestSources.map((r) => r.serviceId).filter(Boolean),
-    catalogServices: catServices.map((s) => ({
+    querySources,
+    serviceIds: querySources.map((r) => r.serviceId).filter(Boolean),
+    catalogServices: allCatServices.map((s) => ({
       serviceId: s.id,
       displayName: s.display_name,
       categoryId: s.category_id,
+      active: s.active !== false,
     })),
     attachmentCatalog,
     theme: applyThemeFromCategory(fallback.theme, themeCategory),
@@ -234,17 +239,25 @@ export function buildCatalogRoleConfig(adminProfile, scopeKey, snapshot) {
 }
 
 /**
- * Superadmin / global catalog helpers (all active services).
+ * Superadmin / global catalog helpers.
+ * `services` stays live-only for UI pickers; `serviceIds` includes archived rows.
  */
 export function buildGlobalCatalogView(snapshot) {
-  const services = (snapshot?.services ?? []).filter((s) => s.active !== false);
+  const all = snapshot?.services ?? [];
+  const live = all.filter((s) => s.active !== false);
   return {
-    services: services.map((s) => ({
+    services: live.map((s) => ({
       serviceId: s.id,
       displayName: s.display_name,
       categoryId: s.category_id,
     })),
-    attachmentCatalog: buildAttachmentCatalogMaps(services),
+    querySources: all.map((s) => ({
+      serviceId: s.id,
+      category: s.display_name,
+      displayName: s.display_name,
+    })),
+    serviceIds: all.map((s) => s.id).filter(Boolean),
+    attachmentCatalog: buildAttachmentCatalogMaps(all),
   };
 }
 

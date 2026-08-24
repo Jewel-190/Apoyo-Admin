@@ -29,6 +29,7 @@ const STATUS_ORDER = [
   "For Approval",
   "Scheduled",
   "Approved",
+  "Declined",
 ] as const;
 
 const BACKLOG_STATUSES = new Set<string>([
@@ -49,6 +50,7 @@ const STATUS_LABELS: Record<string, string> = {
   "for approval": "For Approval",
   scheduled: "Scheduled",
   approved: "Approved",
+  declined: "Declined",
   "case study": "Case Study",
 };
 
@@ -69,6 +71,8 @@ interface RequestRow {
   request_code: string | null;
   user_id: string | null;
   service_id: string | null;
+  service_name?: string | null;
+  assistance_name?: string | null;
   status: string | null;
   submitted_at: string | null;
   created_at: string | null;
@@ -127,6 +131,9 @@ function normalizeStatus(status: unknown): string {
   }
   if (["approved", "complete", "done"].includes(key)) {
     return "Approved";
+  }
+  if (["declined", "denied", "rejected"].includes(key)) {
+    return "Declined";
   }
   return STATUS_LABELS[key] || "Pending";
 }
@@ -194,7 +201,6 @@ async function fetchActiveServices(supabase: ServiceClient): Promise<ScopedServi
   const { data, error } = await supabase
     .from("assistance_services")
     .select("id, category_id, display_name")
-    .eq("active", true)
     .order("sort_order");
 
   if (error) throw error;
@@ -292,7 +298,7 @@ async function fetchScopedRequests(
     const { data, error } = await supabase
       .from("assistance_requests")
       .select(
-        "id, request_code, user_id, service_id, status, submitted_at, created_at, updated_at, case_study_date"
+        "id, request_code, user_id, service_id, service_name, assistance_name, status, submitted_at, created_at, updated_at, case_study_date"
       )
       .in("service_id", serviceIds)
       .neq("status", "draft")
@@ -348,7 +354,10 @@ function buildAppRecords(
     return {
       id: row.request_code || row.id,
       name: namesById[String(row.user_id ?? "")] || "Unknown Applicant",
-      category: serviceLabelById[serviceId] || "Request",
+      category:
+        String(row.service_name || "").trim() ||
+        serviceLabelById[serviceId] ||
+        "Request",
       status: normalizeStatus(row.status),
       submittedAt: row.submitted_at,
       updatedAt: row.updated_at,
@@ -392,6 +401,8 @@ function selectForReport(reportId: string, apps: AppRecord[]): AppRecord[] {
   switch (reportId) {
     case "approved":
       return apps.filter((app) => app.status === "Approved");
+    case "declined":
+      return apps.filter((app) => app.status === "Declined");
     case "backlog":
       return apps.filter((app) => BACKLOG_STATUSES.has(app.status));
     case "master":
@@ -442,6 +453,26 @@ function buildReport(reportId: string, apps: AppRecord[]): BuiltReport {
         category: app.category,
         submitted: formatDateCell(app.submittedAt || app.createdAt),
         approved: formatDateTimeCell(app.updatedAt || app.createdAt),
+      })),
+    };
+  }
+
+  if (reportId === "declined") {
+    return {
+      recordCount: apps.length,
+      columns: [
+        { key: "id", label: "Application ID", width: 16 },
+        { key: "name", label: "Applicant Name", width: 26 },
+        { key: "category", label: "Service Category", width: 22 },
+        { key: "submitted", label: "Submitted Date", width: 22 },
+        { key: "declined", label: "Declined On", width: 22 },
+      ],
+      rows: apps.map((app) => ({
+        id: app.id,
+        name: app.name,
+        category: app.category,
+        submitted: formatDateCell(app.submittedAt || app.createdAt),
+        declined: formatDateTimeCell(app.updatedAt || app.createdAt),
       })),
     };
   }
@@ -509,6 +540,7 @@ function buildReport(reportId: string, apps: AppRecord[]): BuiltReport {
 const REPORT_TITLES: Record<string, string> = {
   master: "Applications Master List",
   approved: "Approved Beneficiaries",
+  declined: "Declined Requests",
   backlog: "Open Workload (Backlog)",
   status_summary: "Status Summary",
 };

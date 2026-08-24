@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import appLogoFallback from "../../assets/apoyo1.png";
-import dasmaLogoFallback from "../../assets/Dasma.png";
 import { BrandChrome } from "../../shared/components/BrandChrome";
 import { useAuth } from "../../shared/context/AuthContext";
 
@@ -42,6 +40,7 @@ const navTree = [
       { path: "/superadmin/data-management/voters", label: "Voters" },
       { path: "/superadmin/data-management/users", label: "Users" },
       { path: "/superadmin/data-management/admins", label: "Admins" },
+      { path: "/superadmin/data-management/service-logs", label: "Service Logs" },
     ],
   },
   {
@@ -97,7 +96,7 @@ function LogoutConfirmModal({ open, onCancel, onConfirm, isLoggingOut }) {
       aria-modal="true"
       aria-labelledby="superadmin-logout-confirm-title"
     >
-      <div className="w-full max-w-md rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_20px_45px_-24px_rgba(10,70,111,0.6)]">
+      <div className="w-full max-w-md rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_20px_45px_-24px_rgba(var(--system-primary-rgb),0.6)]">
         <div className="flex items-start gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-ocean-200 bg-ocean-50 text-ocean-700">
             <LogoutIcon />
@@ -188,27 +187,21 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
 
   const sidebarInner = (
     <>
-      <div className="relative shrink-0 border-b border-white/10 px-5 pb-5 pt-7">
+      <div className="relative shrink-0 border-b border-white/10 px-5 pb-4 pt-5">
         <div
           className="pointer-events-none absolute -right-20 -top-20 size-56 rounded-full bg-ocean-300/20 blur-3xl"
           aria-hidden
         />
         <div className="flex w-full items-center justify-center gap-3">
-          <BrandChrome
-            variant="superadmin-nav"
-            fallbacks={{
-              apoyoLogo: appLogoFallback,
-              dasmaLogo: dasmaLogoFallback,
-            }}
-          />
+          <BrandChrome variant="superadmin-nav" />
         </div>
       </div>
 
-      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-hidden px-3 pb-6 pt-1">
-        <p className="mb-1 px-3 text-center text-[11px] font-semibold uppercase tracking-wider text-ocean-300/80">
+      <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-3 pb-4 pt-1 [scrollbar-color:rgba(255,255,255,0.28)_transparent] [scrollbar-width:thin]">
+        <p className="mb-1 shrink-0 px-3 text-center text-[11px] font-semibold uppercase tracking-wider text-ocean-300/80">
           Navigation
         </p>
-        <ul className="space-y-0.5">
+        <ul className="space-y-0.5 pb-1">
           {navTree.map((item) => {
             if (item.kind === "leaf") {
               return (
@@ -305,7 +298,7 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
 
       <aside
         id="navigation-sidebar"
-        className={`fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(100%,18rem)] shrink-0 flex-col border-r border-white/10 bg-gradient-to-b from-ocean-900 via-ocean-950 to-[#021918] font-sans shadow-[8px_0_40px_-12px_rgba(4,43,42,0.55)] transition-transform duration-200 ease-out lg:w-[var(--superadmin-sidebar-w)] lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(100%,18rem)] shrink-0 flex-col border-r border-white/10 bg-gradient-to-b from-ocean-900 via-ocean-950 to-[var(--system-sidebar-deep)] font-sans shadow-[8px_0_40px_-12px_rgba(var(--system-primary-rgb),0.55)] transition-transform duration-200 ease-out lg:w-[var(--superadmin-sidebar-w)] lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         aria-label="Main navigation"

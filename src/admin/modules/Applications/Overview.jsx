@@ -16,6 +16,7 @@ import {
   lineAdminInsetHairline,
 } from "../../../shared/lib/adminLineStatusStyles";
 import { useAuth } from "../../../shared/context/AuthContext";
+import { collectApplicationQuerySources } from "../../../shared/lib/lineServiceScope";
 import { formatAssistanceLineTitle } from "../../../shared/lib/assistanceCategoryDisplay";
 import { canAutoTransitionToInProgress } from "../../../shared/domain/status";
 import { useOpenRequestFromLocation } from "../../../shared/hooks/useOpenRequestFromLocation";
@@ -33,7 +34,7 @@ export default function Overview() {
   const [selectedApplication, setSelectedApplication] = useState(null);
 
   const sourceTables = useMemo(
-    () => roleConfig?.requestSources || [],
+    () => collectApplicationQuerySources(roleConfig),
     [roleConfig]
   );
 
@@ -96,7 +97,8 @@ export default function Overview() {
               row.status !== "Resubmitted" &&
               row.status !== "For Approval" &&
               row.status !== "Scheduled" &&
-              row.status !== "Approved"
+              row.status !== "Approved" &&
+              row.status !== "Declined"
           )
           .sort((a, b) => {
             const aTime = new Date(a.submittedAt || a.createdAt || 0).getTime();

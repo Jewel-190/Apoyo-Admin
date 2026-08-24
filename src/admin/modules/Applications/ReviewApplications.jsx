@@ -1283,7 +1283,7 @@ function ReviewApplications({
         style={{ fontFamily: "'Instrument Sans', sans-serif" }}
       >
         <div
-          className="flex min-h-0 flex-1 w-full max-w-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-[0_4px_28px_-10px_rgba(0,139,136,0.22)] ring-1 ring-gray-900/[0.04]"
+          className="flex min-h-0 flex-1 w-full max-w-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm ring-1 ring-gray-900/[0.04]"
           style={{ fontFamily: "'Instrument Sans', sans-serif" }}
         >
           <div className="flex shrink-0 flex-col gap-3 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4 md:px-8">

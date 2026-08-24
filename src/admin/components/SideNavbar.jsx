@@ -12,10 +12,9 @@ import {
   LogOut,
   ChevronDown,
 } from "lucide-react";
-import apoyoLogoFallback from "../../assets/apoyo2.png";
-import dasmaLogoFallback from "../../assets/Dasma.png";
 import { BrandChrome } from "../../shared/components/BrandChrome";
 import { useAuth } from "../../shared/context/AuthContext";
+import { DEFAULT_ADMIN_THEME } from "../../shared/config/roleConfig";
 
 const subItems = [
   { label: "Overview", to: "/admin/applications/overview" },
@@ -29,7 +28,7 @@ const forApprovalSubItems = [
 ];
 
 const navItems = [
-  { label: "Approved", to: "/admin/approved", icon: <Archive size={17} /> },
+  { label: "Archive", to: "/admin/archive", icon: <Archive size={17} /> },
   { label: "Notifications", to: "/admin/notifications", icon: <Bell size={17} /> },
   { label: "Reports", to: "/admin/reports", icon: <FileText size={17} /> },
   { label: "Activity Logs", to: "/admin/activity-logs", icon: <Activity size={17} /> },
@@ -145,8 +144,8 @@ export default function SideNavbar({ mobileOpen = false, onMobileClose }) {
   const navigate = useNavigate();
   const { signOut, roleConfig, user } = useAuth();
 
-  const primary = roleConfig?.theme?.primary || "#008B88";
-  const secondary = roleConfig?.theme?.secondary || "#06C1EC";
+  const primary = roleConfig?.theme?.primary || DEFAULT_ADMIN_THEME.primary;
+  const secondary = roleConfig?.theme?.secondary || DEFAULT_ADMIN_THEME.secondary;
   const tertiary = roleConfig?.theme?.tertiary || secondary;
 
   const roleTitleRaw = String(roleConfig?.title || "Admin").trim();
@@ -216,33 +215,28 @@ export default function SideNavbar({ mobileOpen = false, onMobileClose }) {
 
       <aside
         id="admin-navigation-sidebar"
-        className={`fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(100%,13rem)] shrink-0 flex-col border-r border-gray-100 bg-white px-3 py-6 font-sans shadow-[8px_0_40px_-12px_rgba(15,23,42,0.18)] transition-transform duration-200 ease-out lg:w-[var(--admin-sidebar-w,13rem)] lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(100%,18rem)] shrink-0 flex-col border-r border-gray-100 bg-white font-sans shadow-[8px_0_40px_-12px_rgba(15,23,42,0.18)] transition-transform duration-200 ease-out lg:w-[var(--admin-sidebar-w,15rem)] lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         aria-label="Main navigation"
       >
-        <div className="mb-6 flex w-full shrink-0 justify-center px-2">
-          <BrandChrome
-            variant="admin-nav"
-            fallbacks={{
-              apoyoLogo: apoyoLogoFallback,
-              dasmaLogo: dasmaLogoFallback,
-            }}
-          />
+        <div className="shrink-0 border-b border-gray-100 px-5 pb-4 pt-5">
+          <div className="flex w-full items-center justify-center">
+            <BrandChrome variant="admin-nav" />
+          </div>
+          <div className="mt-4 px-1">
+            <p className="text-[10px] uppercase tracking-wide text-gray-400">Signed in as</p>
+            <p className="text-xs font-semibold" style={{ color: primary }}>
+              {assistanceName}
+              {roleSuffix}
+            </p>
+            {adminEmail ? (
+              <p className="mt-0.5 break-all font-mono text-[10px] text-gray-400">{adminEmail}</p>
+            ) : null}
+          </div>
         </div>
 
-        <div className="mb-3 shrink-0 px-2">
-          <p className="text-[10px] uppercase tracking-wide text-gray-400">Signed in as</p>
-          <p className="text-xs font-semibold" style={{ color: primary }}>
-            {assistanceName}
-            {roleSuffix}
-          </p>
-          {adminEmail ? (
-            <p className="mt-0.5 break-all font-mono text-[10px] text-gray-400">{adminEmail}</p>
-          ) : null}
-        </div>
-
-        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3 pr-2 [scrollbar-color:#d1d5db_transparent] [scrollbar-gutter:stable] [scrollbar-width:thin]">
           <NavLink
             to="/admin/dashboard"
             onClick={closeMobileNav}
@@ -439,14 +433,16 @@ export default function SideNavbar({ mobileOpen = false, onMobileClose }) {
           ))}
         </nav>
 
-        <button
-          type="button"
-          onClick={() => setLogoutConfirmOpen(true)}
-          className="mt-2 flex shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500"
-        >
-          <LogOut size={17} />
-          Log Out
-        </button>
+        <div className="shrink-0 border-t border-gray-100 px-3 py-3">
+          <button
+            type="button"
+            onClick={() => setLogoutConfirmOpen(true)}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500"
+          >
+            <LogOut size={17} />
+            Log Out
+          </button>
+        </div>
       </aside>
 
       <LogoutConfirmModal

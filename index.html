@@ -2,10 +2,41 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
+    <link rel="icon" type="image/png" href="/apoyo-favicon.png" />
+    <link rel="apple-touch-icon" href="/apoyo-favicon.png" />
+    <!-- Locked Apoyo mark — keep in sync with FAVICON_URL in staticAssets.js -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Apoyo Admin</title>
+    <!--
+      Theme boot (FOUC guard): apply last-known System Theme from localStorage
+      before first paint. Key must match SYSTEM_THEME_STORAGE_KEY in systemTheme.js.
+      Cold start without cache keeps #root hidden until bootstrapSystemTheme resolves.
+    -->
+    <style>
+      html:not([data-system-theme="ready"]) #root {
+        visibility: hidden;
+      }
+    </style>
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("apoyo.systemTheme.v2");
+          if (!raw) return;
+          var parsed = JSON.parse(raw);
+          var vars = parsed && parsed.cssVars;
+          if (!vars || typeof vars !== "object") return;
+          var root = document.documentElement;
+          for (var key in vars) {
+            if (Object.prototype.hasOwnProperty.call(vars, key)) {
+              root.style.setProperty(key, String(vars[key]));
+            }
+          }
+          root.setAttribute("data-system-theme", "ready");
+        } catch (e) {
+          /* ignore corrupt cache */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

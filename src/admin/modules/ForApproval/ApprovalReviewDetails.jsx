@@ -17,14 +17,14 @@ import {
   mapAttachments,
 } from "../../../shared/lib/requestAttachments";
 import { DetailActionsPanel, InterviewInstructions } from "../../components/forApprovalDetailUi";
-import { detailFont, detailPrimaryButtonCompactClass } from "../../components/forApprovalDetailStyles";
+import { detailFont, detailPrimaryButtonCompactClass, detailDeclineButtonCompactClass } from "../../components/forApprovalDetailStyles";
 import { getAdminRequestStatusBadgeStyle } from "../../../shared/lib/adminLineStatusStyles";
 import SubmittedDocumentsThumbnails from "../../components/SubmittedDocumentsThumbnails";
 
 /**
  * Shared split-panel detail:
  * - variant `schedule`: For Approval → one-click move to Scheduled (default).
- * - variant `disbursement`: Case study queue → approve for disbursement (DB `approved`, Approved list).
+ * - variant `disbursement`: Case study queue → approve or decline for archive (DB `approved` / `declined`).
  * Includes read-only submitted-document preview alongside scheduling/disbursement actions.
  */
 export default function ApprovalReviewDetails({
@@ -37,6 +37,9 @@ export default function ApprovalReviewDetails({
   onApproveDisbursement,
   approveError = "",
   isApproving = false,
+  onDeclineDisbursement,
+  declineError = "",
+  isDeclining = false,
   readOnly = false,
   backLabel = "Back to scheduling",
 }) {
@@ -47,6 +50,8 @@ export default function ApprovalReviewDetails({
   const [documentsList, setDocumentsList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [confirmAction, setConfirmAction] = useState(null);
+  const confirmBusy = confirmAction === "approve" ? isApproving : isDeclining;
 
   useEffect(() => {
     let cancelled = false;
@@ -213,7 +218,7 @@ export default function ApprovalReviewDetails({
       style={{ fontFamily: "'Instrument Sans', sans-serif" }}
     >
       <div
-        className="flex min-h-0 flex-1 w-full max-w-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-[0_4px_28px_-10px_rgba(0,139,136,0.22)] ring-1 ring-gray-900/[0.04]"
+        className="flex min-h-0 flex-1 w-full max-w-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm ring-1 ring-gray-900/[0.04]"
         style={{ fontFamily: "'Instrument Sans', sans-serif" }}
       >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4 md:px-8">
@@ -446,8 +451,8 @@ export default function ApprovalReviewDetails({
                           Final approval
                         </p>
                         <p className="mt-0.5 text-xs text-gray-500">
-                          Confirm this request is ready for disbursement. It will be marked approved and listed in
-                          Approved.
+                          Approve or decline this request. Each action asks for one confirmation, then the
+                          request is moved to Archive.
                         </p>
                       </div>
                     </div>
@@ -479,15 +484,31 @@ export default function ApprovalReviewDetails({
                   </button>
                 )}
 
+                {variant === "disbursement" && declineError ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {declineError}
+                  </div>
+                ) : null}
+
                 {variant === "disbursement" && !readOnly && (
-                  <button
-                    type="button"
-                    disabled={isApproving || typeof onApproveDisbursement !== "function"}
-                    onClick={() => onApproveDisbursement?.()}
-                    className={`${detailPrimaryButtonCompactClass} w-full max-w-full text-center leading-snug whitespace-normal`}
-                  >
-                    {isApproving ? "Saving…" : "Approve for Disbursement"}
-                  </button>
+                  <div className="flex w-full max-w-full flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      disabled={isApproving || isDeclining || typeof onApproveDisbursement !== "function"}
+                      onClick={() => setConfirmAction("approve")}
+                      className={`${detailPrimaryButtonCompactClass} w-full flex-1 text-center leading-snug whitespace-normal`}
+                    >
+                      {isApproving ? "Saving…" : "Approve"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isApproving || isDeclining || typeof onDeclineDisbursement !== "function"}
+                      onClick={() => setConfirmAction("decline")}
+                      className={`${detailDeclineButtonCompactClass} w-full flex-1 text-center leading-snug whitespace-normal`}
+                    >
+                      {isDeclining ? "Saving…" : "Decline"}
+                    </button>
+                  </div>
                 )}
 
                 {readOnly ? (
@@ -501,6 +522,74 @@ export default function ApprovalReviewDetails({
         </div>
       )}
       </div>
+      {confirmAction ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-950/40 backdrop-blur-[2px]"
+            aria-label="Close confirmation"
+            onClick={() => {
+              if (!confirmBusy) setConfirmAction(null);
+            }}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="disbursement-confirm-title"
+            className={`relative z-10 w-full max-w-md rounded-2xl border bg-white p-5 shadow-xl ${
+              confirmAction === "decline" ? "border-[#F8D0D0]" : "border-gray-200"
+            }`}
+          >
+            <h3
+              id="disbursement-confirm-title"
+              className="text-lg font-semibold"
+              style={{ color: confirmAction === "decline" ? "#7A2E2E" : undefined }}
+            >
+              {confirmAction === "decline" ? "Decline this request?" : "Approve this request?"}
+            </h3>
+            <p className="mt-2 text-sm text-gray-600">
+              {confirmAction === "decline"
+                ? "This will mark the request as Declined and move it to Archive. This cannot be undone from Case Study."
+                : "This will mark the request as Approved and move it to Archive. This cannot be undone from Case Study."}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={confirmBusy}
+                onClick={() => setConfirmAction(null)}
+                className="inline-flex h-9 items-center justify-center rounded-xl border border-gray-200 px-4 text-xs font-semibold text-gray-700 disabled:opacity-45"
+              >
+                Cancel
+              </button>
+              {confirmAction === "decline" ? (
+                <button
+                  type="button"
+                  disabled={confirmBusy || typeof onDeclineDisbursement !== "function"}
+                  onClick={() => {
+                    setConfirmAction(null);
+                    onDeclineDisbursement?.();
+                  }}
+                  className={`${detailDeclineButtonCompactClass} h-9 px-4`}
+                >
+                  {isDeclining ? "Saving…" : "Confirm decline"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={confirmBusy || typeof onApproveDisbursement !== "function"}
+                  onClick={() => {
+                    setConfirmAction(null);
+                    onApproveDisbursement?.();
+                  }}
+                  className={`${detailPrimaryButtonCompactClass} h-9 px-4 shadow-none hover:shadow-md`}
+                >
+                  {isApproving ? "Saving…" : "Confirm approve"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

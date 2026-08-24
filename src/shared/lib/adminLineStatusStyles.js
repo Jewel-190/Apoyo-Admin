@@ -18,6 +18,7 @@ export const ADMIN_REQUEST_STATUS_COLORS = {
   Scheduled: { background: "#D8E6FA", text: "#2F4F7A" },
   "Case Study": { background: "#EDE7F6", text: "#4527A0" },
   Approved: { background: "#C8F1C8", text: "#2B2B2B" },
+  Declined: { background: "#F8D0D0", text: "#7A2E2E" },
 };
 
 /** Document / attachment result badges in review & finalize flows. */
@@ -40,7 +41,7 @@ export const ADMIN_DOCUMENT_ACCENT_COLORS = {
   resubmitted: "#5C4A00",
 };
 
-const FALLBACK_PRIMARY = "var(--apoyo-primary, #0f766e)";
+const FALLBACK_PRIMARY = "var(--apoyo-primary)";
 
 /** @deprecated Use ADMIN_REQUEST_STATUS_COLORS — kept for imports that expect this shape. */
 export const IN_PROGRESS_BADGE_STYLE = toInlineStyle(
@@ -157,6 +158,9 @@ export function getAdminActivityLogBorderColor(actionText, status) {
   }
   if (text.includes("case study")) {
     return getAdminRequestStatusChartColor("Case Study");
+  }
+  if (text.includes("declined") || text.includes("denied") || text.includes("rejected")) {
+    return getAdminRequestStatusChartColor("Declined");
   }
   if (text.includes("approved")) {
     return getAdminRequestStatusChartColor("Approved");

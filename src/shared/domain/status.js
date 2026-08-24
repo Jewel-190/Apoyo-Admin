@@ -13,6 +13,7 @@ export const REQUEST_STATUS_DB_VALUES = [
   "scheduled",
   "case study",
   "approved",
+  "declined",
 ];
 
 export const REQUEST_STATUS_LABELS = {
@@ -25,7 +26,11 @@ export const REQUEST_STATUS_LABELS = {
   scheduled: "Scheduled",
   "case study": "Case Study",
   approved: "Approved",
+  declined: "Declined",
 };
+
+export const ARCHIVE_STATUS_LABELS = ["Approved", "Declined"];
+export const ARCHIVE_STATUS_DB_VALUES = ["approved", "declined"];
 
 export function normalizeStatus(status) {
   const key = String(status ?? "").trim().toLowerCase();
@@ -49,8 +54,15 @@ export function normalizeStatus(status) {
   if (["for approval", "for_approval"].includes(key)) return "For Approval";
   if (key === "scheduled") return "Scheduled";
   if (["approved", "complete", "done"].includes(key)) return "Approved";
+  if (["declined", "denied", "rejected"].includes(key)) return "Declined";
   if (key === "pending") return "Pending";
+  if (key === "draft") return "Draft";
   return "Pending";
+}
+
+export function isArchiveRequestStatus(status) {
+  const label = normalizeStatus(status);
+  return label === "Approved" || label === "Declined";
 }
 
 /** True when the stored/UI status is Resubmitted (not merely attachment-level). */
@@ -81,6 +93,10 @@ export function dbStatusForLabel(label) {
       return "case study";
     case "Approved":
       return "approved";
+    case "Declined":
+      return "declined";
+    case "Draft":
+      return "draft";
     default:
       return "pending";
   }

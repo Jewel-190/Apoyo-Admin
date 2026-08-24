@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import MiniNotifications from "../components/MiniNotifications";
 import { useAuth } from "../../shared/context/AuthContext";
+import { collectApplicationQuerySources } from "../../shared/lib/lineServiceScope";
+import { DEFAULT_ADMIN_THEME } from "../../shared/config/roleConfig";
 import { supabase } from "../../shared/lib/supabaseClient";
 import { formatAssistanceLineTitle } from "../../shared/lib/assistanceCategoryDisplay";
 
@@ -47,6 +49,13 @@ const REPORT_CARDS = [
     description:
       "Applicants approved for assistance — ideal for disbursement records and audits.",
     icon: BadgeCheck,
+    aggregate: false,
+  },
+  {
+    id: "declined",
+    title: "Declined Requests",
+    description: "Applicants declined at disbursement — kept in Archive for audit.",
+    icon: ListTodo,
     aggregate: false,
   },
   {
@@ -216,15 +225,12 @@ export default function Reports() {
   const [exportingId, setExportingId] = useState(null);
   const [exportNotice, setExportNotice] = useState("");
 
-  const theme = roleConfig?.theme || authTheme || {
-    primary: "#0D9488",
-    secondary: "#14B8A6",
-  };
-  const primary = theme.primary || "#0D9488";
-  const secondary = theme.secondary || "#14B8A6";
+  const theme = roleConfig?.theme || authTheme || DEFAULT_ADMIN_THEME;
+  const primary = theme.primary || DEFAULT_ADMIN_THEME.primary;
+  const secondary = theme.secondary || DEFAULT_ADMIN_THEME.secondary;
 
   const sourceTables = useMemo(
-    () => roleConfig?.requestSources || [],
+    () => collectApplicationQuerySources(roleConfig),
     [roleConfig]
   );
 
@@ -421,7 +427,7 @@ export default function Reports() {
             value={catalogSearch}
             onChange={(event) => setCatalogSearch(event.target.value)}
             disabled={showContentSkeleton}
-            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white text-sm text-gray-500 outline-none shadow-md border border-gray-100 focus:ring-2 focus:ring-teal-300 transition-all duration-200 placeholder-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white text-sm text-gray-500 outline-none shadow-md border border-gray-100 focus:ring-2 focus:ring-[color:var(--apoyo-ring)] transition-all duration-200 placeholder-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
         <MiniNotifications />
@@ -482,7 +488,7 @@ export default function Reports() {
                 value={category}
                 onChange={(event) => setCategory(event.target.value)}
                 disabled={showContentSkeleton}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 outline-none focus:ring-2 focus:ring-teal-300 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 outline-none focus:ring-2 focus:ring-[color:var(--apoyo-ring)] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {categoryOptions.map((option) => (
                   <option key={option} value={option}>

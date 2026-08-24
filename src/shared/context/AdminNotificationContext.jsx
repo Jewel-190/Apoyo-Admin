@@ -82,13 +82,17 @@ export function AdminNotificationProvider({ children }) {
 
   const sourceServiceLookup = useMemo(() => {
     const map = {};
-    for (const source of roleConfig?.requestSources || []) {
+    const rows = [
+      ...(roleConfig?.querySources || []),
+      ...(roleConfig?.requestSources || []),
+    ];
+    for (const source of rows) {
       if (source.serviceId) {
         map[source.serviceId] = source;
       }
     }
     return map;
-  }, [roleConfig?.requestSources]);
+  }, [roleConfig?.querySources, roleConfig?.requestSources]);
 
   allowedServiceIdsRef.current = allowedServiceIds;
   sourceServiceLookupRef.current = sourceServiceLookup;

@@ -109,7 +109,7 @@ export default function MiniNotifications({ maxItems = 8 }) {
           </div>
 
           {showEnableAlerts ? (
-            <div className="px-4 py-2.5 border-b border-gray-100 bg-teal-50/70">
+            <div className="px-4 py-2.5 border-b border-gray-100 bg-[color-mix(in_srgb,var(--apoyo-primary)_8%,white)]">
               <p className="text-[11px] text-gray-600 mb-1.5">
                 Get a desktop popup when new requests arrive — even if this tab is in the background.
               </p>
@@ -117,7 +117,7 @@ export default function MiniNotifications({ maxItems = 8 }) {
                 type="button"
                 onClick={handleEnableAlerts}
                 disabled={isEnablingAlerts}
-                className="text-[11px] font-semibold text-teal-700 hover:text-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="text-[11px] font-semibold text-[color:var(--apoyo-primary)] hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isEnablingAlerts ? "Enabling alerts..." : "Enable browser alerts"}
               </button>

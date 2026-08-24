@@ -7,7 +7,7 @@ import ActionRequired from "./modules/Applications/ActionRequired";
 import Resubmissions from "./modules/Applications/Resubmissions";
 import Scheduling from "./modules/ForApproval/Scheduling";
 import CaseStudy from "./modules/ForApproval/CaseStudy";
-import Approved from "./modules/Approved";
+import Archive from "./modules/Archive";
 import Notifications from "./modules/Notifications";
 import Reports from "./modules/Reports";
 import ActivityLogs from "./modules/ActivityLogs";
@@ -34,8 +34,8 @@ export default function AdminRoutes() {
         <Route path="scheduling" element={<Scheduling />} />
         <Route path="case-study" element={<CaseStudy />} />
 
-        <Route path="approved" element={<Approved />} />
-        <Route path="archive" element={<Navigate to="/admin/approved" replace />} />
+        <Route path="archive" element={<Archive />} />
+        <Route path="approved" element={<Navigate to="/admin/archive" replace />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="reports" element={<Reports />} />
         <Route path="activity-logs" element={<ActivityLogs />} />

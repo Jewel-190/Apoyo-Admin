@@ -1,7 +1,7 @@
 export function AuditTrail() {
   return (
-    <section className="rounded-2xl border border-ocean-200 bg-white p-6 shadow-[0_12px_30px_-24px_rgba(10,70,111,0.7)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-600">Audit trail</p>
+    <section className="rounded-2xl border border-ocean-200 bg-white p-6 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">Audit trail</p>
       <h2 className="mt-1 text-2xl font-semibold text-ocean-950">Audit trail</h2>
       <p className="mt-2 text-sm text-ocean-700">
         Audit trail records will appear here once logging views are connected.

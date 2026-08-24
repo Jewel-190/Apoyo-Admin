@@ -13,6 +13,7 @@ import { supabase } from "../../../shared/lib/supabaseClient";
 import { mergeRequestRow, patchRowOverride } from "../../../shared/lib/forApprovalOverrides";
 import { REQUEST_DB_STATUS } from "../../../shared/lib/requestDbStatus";
 import { useAuth } from "../../../shared/context/AuthContext";
+import { collectApplicationQuerySources } from "../../../shared/lib/lineServiceScope";
 import AdminStatusBadge from "../../components/AdminStatusBadge";
 import {
   buildLineAdminStatusBadgeStyles,
@@ -35,7 +36,7 @@ export default function Scheduling() {
   const [scheduleError, setScheduleError] = useState("");
   const [isScheduling, setIsScheduling] = useState(false);
 
-  const sourceTables = useMemo(() => roleConfig?.requestSources || [], [roleConfig]);
+  const sourceTables = useMemo(() => collectApplicationQuerySources(roleConfig), [roleConfig]);
 
   const tabs = useMemo(() => ["All", ...sourceTables.map((source) => source.category)], [sourceTables]);
 

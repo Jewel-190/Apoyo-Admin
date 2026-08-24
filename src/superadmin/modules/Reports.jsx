@@ -57,6 +57,14 @@ const REPORT_CARDS = [
     unit: "rows in range",
   },
   {
+    id: "declined",
+    title: "Declined Requests",
+    description:
+      "Requests declined at disbursement across every assistance — kept in Archive for audit.",
+    icon: "⛔",
+    unit: "rows in range",
+  },
+  {
     id: "admin_directory",
     title: "Admin Directory",
     description:
@@ -513,7 +521,7 @@ export function Reports() {
             {showContentSkeleton ? (
               <RangeLabelSkeleton />
             ) : (
-              <span className="ml-1 text-[11px] font-medium text-ocean-600">
+              <span className="ml-1 text-[11px] font-medium text-ocean-700">
                 {summary?.rangeLabel ||
                   (rangeReady ? "…" : "Select a custom range")}
               </span>
@@ -522,7 +530,7 @@ export function Reports() {
 
           {rangePreset === "custom" ? (
             <div className="flex flex-wrap items-end gap-2">
-              <label className="text-[11px] text-ocean-600">
+              <label className="text-[11px] text-ocean-700">
                 From
                 <input
                   type="date"
@@ -533,7 +541,7 @@ export function Reports() {
                   className="mt-1 block rounded-lg border border-ocean-200 px-2 py-1.5 text-xs text-ocean-800 outline-none focus:border-ocean-400"
                 />
               </label>
-              <label className="text-[11px] text-ocean-600">
+              <label className="text-[11px] text-ocean-700">
                 To
                 <input
                   type="date"
@@ -572,13 +580,13 @@ export function Reports() {
         ) : null}
 
         {showCustomPrompt ? (
-          <p className="py-10 text-center text-sm text-ocean-600">
+          <p className="py-10 text-center text-sm text-ocean-700">
             Choose a start and end date, then click Apply Range to build your reports.
           </p>
         ) : showContentSkeleton ? (
           <ReportsGridSkeleton />
         ) : reportsView.length === 0 ? (
-          <p className="py-10 text-center text-sm text-ocean-600">
+          <p className="py-10 text-center text-sm text-ocean-700">
             No reports match "{catalogSearch.trim()}".
           </p>
         ) : (
@@ -590,7 +598,7 @@ export function Reports() {
               return (
                 <div
                   key={report.id}
-                  className="flex flex-col rounded-2xl border border-ocean-200 bg-white p-4 transition hover:shadow-[0_16px_36px_-24px_rgba(10,70,111,0.55)]"
+                  className="flex flex-col rounded-2xl border border-ocean-200 bg-white p-4 transition hover:shadow-[0_16px_36px_-24px_rgba(var(--system-primary-rgb),0.55)]"
                 >
                   <div className="flex items-start gap-3">
                     <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-ocean-50 text-lg">
@@ -605,7 +613,7 @@ export function Reports() {
                   </div>
 
                   <div className="mt-4 flex items-center justify-between gap-3">
-                    <span className="text-xs text-ocean-600">
+                    <span className="text-xs text-ocean-700">
                       <span className="font-semibold text-ocean-900">
                         {Number(count).toLocaleString("en-US")}
                       </span>{" "}

@@ -10,6 +10,7 @@ export const STATUS_LABELS = {
   "for approval": "For Approval",
   scheduled: "Scheduled",
   approved: "Approved",
+  declined: "Declined",
   "case study": "Case Study",
 };
 
@@ -51,6 +52,10 @@ export function normalizeStatus(status) {
 
   if (["approved", "complete", "done"].includes(key)) {
     return "Approved";
+  }
+
+  if (["declined", "denied", "rejected"].includes(key)) {
+    return "Declined";
   }
 
   return STATUS_LABELS[key] || "Pending";
@@ -126,6 +131,9 @@ export function buildNotificationDescription(notification, categoryLabel) {
   }
   if (action.includes("scheduled")) return `Scheduled update in ${categoryLabel}`;
   if (action.includes("approved")) return `Approved update in ${categoryLabel}`;
+  if (action.includes("declined") || action.includes("denied") || action.includes("rejected")) {
+    return `Declined update in ${categoryLabel}`;
+  }
   if (action.includes("status")) return `Status update in ${categoryLabel}`;
 
   return `Request update in ${categoryLabel}`;
@@ -170,6 +178,15 @@ export function buildDisplayName(user) {
   ].filter(Boolean);
 
   return nameParts.length > 0 ? nameParts.join(" ") : "Unknown Applicant";
+}
+
+const REQUEST_LIST_SELECT =
+  "id, request_code, user_id, created_at, updated_at, submitted_at, status, case_study_date, service_id, service_name, assistance_name, category_slug, category_id";
+
+function requestServiceLabel(row, meta) {
+  const snapshot = String(row?.service_name ?? "").trim();
+  if (snapshot) return snapshot;
+  return meta?.category || meta?.displayName || "Request";
 }
 
 function resolveServiceId(source) {
@@ -251,6 +268,7 @@ const DASHBOARD_STATUS_BUCKETS = [
   "For Approval",
   "Scheduled",
   "Approved",
+  "Declined",
 ];
 
 function emptyDashboardStatusBuckets() {
@@ -374,9 +392,7 @@ async function fetchApplicationsBySourcesUncached(sources) {
 
   const { data: rows, error } = await supabase
     .from("assistance_requests")
-    .select(
-      "id, request_code, user_id, created_at, updated_at, submitted_at, status, case_study_date, service_id"
-    )
+    .select(REQUEST_LIST_SELECT)
     .in("service_id", serviceIds)
     .neq("status", "draft")
     .order("submitted_at", { ascending: false, nullsFirst: false })
@@ -418,7 +434,7 @@ async function fetchApplicationsBySourcesUncached(sources) {
         requestCode: row.request_code || row.id,
         userId: row.user_id,
         name: buildDisplayName(usersById[row.user_id]),
-        category: meta.category || "Request",
+        category: requestServiceLabel(row, meta),
         date: formatDate(row.submitted_at || row.created_at),
         submittedAt: row.submitted_at || null,
         updatedAt: row.updated_at || null,
@@ -662,17 +678,19 @@ async function findApplicantUserIdsForSearch(searchTerm) {
 }
 
 /**
- * Server-paginated Approved queue. Never loads the full approved set into memory.
+ * Server-paginated Archive queue (approved + declined). Never loads the full set into memory.
  * Search matches application ID, applicant name, and application date across the whole dataset.
  * Optional time presets filter by Application Date (submitted_at, else created_at).
+ * Pass `statuses` to limit to `approved`, `declined`, or both.
  */
-export async function fetchApprovedApplicationsPage({
+export async function fetchArchiveApplicationsPage({
   sources = [],
   serviceId = null,
   search = "",
   page = 1,
   pageSize = APPROVED_PAGE_SIZE_DEFAULT,
   timeRange = null,
+  statuses = ["approved", "declined"],
 } = {}) {
   const sourceList = Array.isArray(sources) ? sources : [];
   const resolved = sourceList.map((source) => ({
@@ -719,14 +737,16 @@ export async function fetchApprovedApplicationsPage({
       : null;
   const timeRangeOrParts = buildApprovedTimeRangeOrParts(rangeFrom, rangeTo);
 
+  const allowedStatuses = (Array.isArray(statuses) ? statuses : ["approved", "declined"])
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter((value) => value === "approved" || value === "declined");
+  const archiveStatuses = allowedStatuses.length > 0 ? [...new Set(allowedStatuses)] : ["approved", "declined"];
+
   const buildQuery = () => {
     let nextQuery = supabase
       .from("assistance_requests")
-      .select(
-        "id, request_code, user_id, created_at, updated_at, submitted_at, status, case_study_date, service_id",
-        { count: "exact" }
-      )
-      .eq("status", "approved")
+      .select(REQUEST_LIST_SELECT, { count: "exact" })
+      .in("status", archiveStatuses)
       .in("service_id", serviceIds)
       .order("submitted_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
@@ -802,7 +822,7 @@ export async function fetchApprovedApplicationsPage({
       requestCode: row.request_code || row.id,
       userId: row.user_id,
       name: buildDisplayName(usersById[row.user_id]),
-      category: meta.category || "Request",
+      category: requestServiceLabel(row, meta),
       date: formatDate(row.submitted_at || row.created_at),
       submittedAt: row.submitted_at || null,
       updatedAt: row.updated_at || null,
@@ -827,4 +847,7 @@ export async function fetchApprovedApplicationsPage({
       : null,
   };
 }
+
+/** @deprecated Use `fetchArchiveApplicationsPage`. */
+export const fetchApprovedApplicationsPage = fetchArchiveApplicationsPage;
 

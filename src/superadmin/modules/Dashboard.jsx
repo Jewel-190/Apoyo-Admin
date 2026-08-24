@@ -11,7 +11,6 @@ import {
   Grid3x3,
 } from "lucide-react";
 import { useAuth } from "../../shared/context/AuthContext";
-import { DEFAULT_ADMIN_THEME } from "../../shared/config/roleConfig";
 import { getAdminRequestStatusChartColor } from "../../shared/lib/adminLineStatusStyles";
 import { supabase } from "../../shared/lib/supabaseClient";
 
@@ -35,6 +34,7 @@ const MONITOR_STATUS_COLUMNS = [
   "For Approval",
   "Scheduled",
   "Approved",
+  "Declined",
 ];
 
 const STATUS_ORDER = [
@@ -45,6 +45,7 @@ const STATUS_ORDER = [
   "For Approval",
   "Scheduled",
   "Approved",
+  "Declined",
 ];
 
 const PIPELINE_ITEMS = [
@@ -55,6 +56,7 @@ const PIPELINE_ITEMS = [
   { key: "For Approval", label: "For approval" },
   { key: "Scheduled", label: "Scheduled" },
   { key: "Approved", label: "Approved" },
+  { key: "Declined", label: "Declined" },
 ];
 
 function formatUtcDateInput(date) {
@@ -175,58 +177,51 @@ function DashboardStatCard({
   value,
   subtitle,
   dateRange,
-  primary,
-  secondary,
   highlight = false,
   icon: Icon = Layers,
 }) {
-  const style = highlight
-    ? {
-        background: `linear-gradient(to right, ${primary}, ${secondary})`,
-        color: "white",
-      }
-    : {
-        background: "white",
-        border: "1px solid rgba(12, 72, 120, 0.14)",
-      };
-
   return (
     <div
-      className="rounded-2xl p-4 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
-      style={style}
+      className={`rounded-2xl p-4 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 ${
+        highlight ? "text-white" : "border border-ocean-200 bg-white"
+      }`}
+      style={highlight ? { background: "var(--system-brand-gradient)" } : undefined}
     >
       <div className="flex items-start justify-between gap-3">
         <p
-          className="text-xs font-semibold uppercase tracking-[0.11em]"
-          style={{ color: highlight ? "rgba(255,255,255,0.85)" : "#4B6B82" }}
+          className={`text-xs font-semibold uppercase tracking-[0.11em] ${
+            highlight ? "text-white/85" : "text-ocean-700"
+          }`}
         >
           {title}
         </p>
         <Icon
           size={18}
           strokeWidth={1.7}
-          className="shrink-0"
-          style={{ color: highlight ? "rgba(255,255,255,0.85)" : primary }}
+          className={`shrink-0 ${highlight ? "text-white/85" : "text-ocean-700"}`}
           aria-hidden
         />
       </div>
       {dateRange ? (
         <p
-          className="mt-1 text-[10px] font-medium leading-snug"
-          style={{ color: highlight ? "rgba(255,255,255,0.75)" : "#6B8CA8" }}
+          className={`mt-1 text-[10px] font-medium leading-snug ${
+            highlight ? "text-white/75" : "text-ocean-700"
+          }`}
         >
           {dateRange}
         </p>
       ) : null}
       <p
-        className="mt-2 text-3xl md:text-4xl font-bold leading-none"
-        style={{ color: highlight ? "white" : primary }}
+        className={`mt-2 text-3xl font-bold leading-none md:text-4xl ${
+          highlight ? "text-white" : "text-ocean-700"
+        }`}
       >
         {value}
       </p>
       <p
-        className="mt-2 text-[11px] font-medium"
-        style={{ color: highlight ? "rgba(255,255,255,0.85)" : "#6B8CA8" }}
+        className={`mt-2 text-[11px] font-medium ${
+          highlight ? "text-white/85" : "text-ocean-700"
+        }`}
       >
         {subtitle}
       </p>
@@ -234,13 +229,13 @@ function DashboardStatCard({
   );
 }
 
-function PeriodSelect({ value, onChange, accentColor }) {
+function PeriodSelect({ value, onChange }) {
   return (
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="max-w-full shrink-0 text-xs rounded-lg border border-ocean-200 bg-white px-2 py-1 text-ocean-800 outline-none focus-visible:ring-2 focus-visible:ring-offset-0"
-      style={{ accentColor }}
+      className="max-w-full shrink-0 rounded-lg border border-ocean-200 bg-white px-2 py-1 text-xs text-ocean-800 outline-none focus-visible:ring-2 focus-visible:ring-ocean-500 focus-visible:ring-offset-0"
+      style={{ accentColor: "var(--system-primary)" }}
     >
       {PERIOD_OPTIONS.map((option) => (
         <option key={option.value} value={option.value}>
@@ -288,9 +283,6 @@ export function DashboardPage() {
   const [loadingCustomMonitor, setLoadingCustomMonitor] = useState(false);
   const [customMonitorError, setCustomMonitorError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
-
-  const primary = DEFAULT_ADMIN_THEME.primary;
-  const secondary = DEFAULT_ADMIN_THEME.secondary;
 
   useEffect(() => {
     let mounted = true;
@@ -565,10 +557,10 @@ export function DashboardPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1
-            className="text-2xl md:text-3xl font-bold mb-1"
+            className="mb-1 text-2xl font-bold md:text-3xl"
             style={{
               fontFamily: "'Instrument Sans', sans-serif",
-              background: `linear-gradient(to right, ${primary}, ${secondary})`,
+              background: "var(--system-brand-gradient)",
               backgroundClip: "text",
               WebkitBackgroundClip: "text",
               color: "transparent",
@@ -577,13 +569,13 @@ export function DashboardPage() {
           >
             {roleConfig?.dashboardTitle || "Super Admin Dashboard"}
           </h1>
-          <p className="text-sm text-ocean-600/90">
+          <p className="text-sm text-ocean-700/90">
             Platform-wide oversight of assistance applications, catalog health, and pipeline load.
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {lastUpdated ? (
-            <p className="hidden text-xs font-medium text-ocean-600 sm:block">
+            <p className="hidden text-xs font-medium text-ocean-700 sm:block">
               Updated {lastUpdated}
             </p>
           ) : null}
@@ -630,8 +622,6 @@ export function DashboardPage() {
                   dateRange={card.dateRange}
                   subtitle={card.subtitle}
                   highlight={card.highlight}
-                  primary={primary}
-                  secondary={secondary}
                 />
               ))}
         </div>
@@ -657,8 +647,6 @@ export function DashboardPage() {
                   title={card.title}
                   value={card.value}
                   subtitle={card.subtitle}
-                  primary={primary}
-                  secondary={secondary}
                   icon={card.icon}
                 />
           ))}
@@ -671,7 +659,7 @@ export function DashboardPage() {
             <AlertTriangle size={18} className="text-orange-400 shrink-0" />
             <h3 className="text-sm font-semibold text-ocean-900 truncate">Pipeline Backlog</h3>
           </div>
-          <p className="mb-3 text-[11px] text-ocean-600">
+          <p className="mb-3 text-[11px] text-ocean-700">
             Current open workload across all assistance.
           </p>
           <div className="grid grid-cols-1 gap-2">
@@ -711,7 +699,7 @@ export function DashboardPage() {
         <section className="flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-ocean-200/80 bg-white p-4 hover:shadow-md transition-shadow duration-300 lg:col-span-2">
           <div className="flex shrink-0 flex-col gap-2 mb-1 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2 min-w-0">
-              <BarChart2 size={16} className="shrink-0" style={{ color: primary }} />
+              <BarChart2 size={16} className="shrink-0 text-ocean-700" />
               <h3 className="text-sm font-semibold text-ocean-900 truncate">
                 Application Status Breakdown
               </h3>
@@ -719,10 +707,9 @@ export function DashboardPage() {
             <PeriodSelect
               value={statusRange}
               onChange={setStatusRange}
-              accentColor={primary}
             />
           </div>
-          <p className="mb-2 ml-1 shrink-0 text-[10px] text-ocean-500">Applications by status</p>
+          <p className="mb-2 ml-1 shrink-0 text-[10px] text-ocean-700">Applications by status</p>
 
           <div className="flex min-h-36 min-w-0 flex-1 flex-col justify-end overflow-x-auto pb-1">
             <div
@@ -766,7 +753,7 @@ export function DashboardPage() {
                           <span className="text-[11px] font-bold text-white">{bar.value}</span>
                         </div>
                       </div>
-                      <p className="line-clamp-2 shrink-0 pb-1 text-center text-[10px] leading-tight text-ocean-600">
+                      <p className="line-clamp-2 shrink-0 pb-1 text-center text-[10px] leading-tight text-ocean-700">
                         {bar.label}
                       </p>
                     </div>
@@ -779,7 +766,7 @@ export function DashboardPage() {
       <section className="min-w-0 overflow-hidden rounded-xl border border-ocean-200/80 bg-white p-4 hover:shadow-md transition-shadow duration-300">
         <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 min-w-0">
-            <PieChart size={16} className="shrink-0" style={{ color: primary }} />
+            <PieChart size={16} className="shrink-0 text-ocean-700" />
             <h3 className="text-sm font-semibold text-ocean-900 truncate">
               Applications by Assistance
             </h3>
@@ -787,7 +774,6 @@ export function DashboardPage() {
           <PeriodSelect
             value={distributionRange}
             onChange={setDistributionRange}
-            accentColor={primary}
           />
         </div>
 
@@ -801,7 +787,7 @@ export function DashboardPage() {
             </div>
           </div>
         ) : tableDistributionItems.length === 0 ? (
-          <p className="text-xs text-ocean-600">No application activity for the selected range.</p>
+          <p className="text-xs text-ocean-700">No application activity for the selected range.</p>
         ) : (
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
             <div className="h-36 w-36 shrink-0">
@@ -817,7 +803,7 @@ export function DashboardPage() {
                   <p className="text-xs font-medium text-ocean-800 truncate min-w-0 flex-1" title={slice.label}>
                     {slice.label}
                   </p>
-                  <p className="text-xs text-ocean-600 shrink-0 tabular-nums">
+                  <p className="text-xs text-ocean-700 shrink-0 tabular-nums">
                     {slice.value} ({slice.pct}%)
                   </p>
                 </div>
@@ -832,7 +818,7 @@ export function DashboardPage() {
           <AlertTriangle size={16} className="text-amber-500" />
           <h3 className="text-sm font-semibold text-ocean-900">Highest Backlog Assistance</h3>
         </div>
-        <p className="mb-4 text-xs text-ocean-600">
+        <p className="mb-4 text-xs text-ocean-700">
           Assistance with the most open cases requiring admin attention.
         </p>
 
@@ -843,7 +829,7 @@ export function DashboardPage() {
             ))}
           </div>
         ) : backlogCategories.length === 0 ? (
-          <p className="text-sm text-ocean-600">No open backlog across assistance.</p>
+          <p className="text-sm text-ocean-700">No open backlog across assistance.</p>
         ) : (
           <div className="min-w-0">
             <div className="space-y-2 md:hidden">
@@ -866,7 +852,7 @@ export function DashboardPage() {
                       ["For Approval", row.for_approval],
                     ].map(([label, count]) => (
                       <div key={`${row.category_id}-${label}`} className="flex items-center justify-between gap-2">
-                        <span className="truncate text-[11px] text-ocean-600">{label}</span>
+                        <span className="truncate text-[11px] text-ocean-700">{label}</span>
                         <span className="tabular-nums text-[11px] font-medium text-ocean-800">{count}</span>
                       </div>
                     ))}
@@ -878,7 +864,7 @@ export function DashboardPage() {
             <div className="hidden min-w-0 overflow-x-auto md:block">
               <table className="w-full min-w-[560px] text-xs">
                 <thead>
-                  <tr className="border-b border-ocean-100 text-left text-ocean-500">
+                  <tr className="border-b border-ocean-100 text-left text-ocean-700">
                     <th className="sticky left-0 bg-white py-2 pr-3 font-semibold">Assistance</th>
                     <th className="px-2 py-2 text-right font-semibold">Total Backlog</th>
                     <th className="px-2 py-2 text-right font-semibold">Pending</th>
@@ -913,16 +899,16 @@ export function DashboardPage() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between mb-4">
           <div>
             <div className="flex items-center gap-2">
-              <Activity size={16} style={{ color: primary }} />
+              <Activity size={16} className="text-ocean-700" />
               <h3 className="text-sm font-semibold text-ocean-900">
                 Assistance Activity Monitor
               </h3>
             </div>
-            <p className="mt-1 text-xs text-ocean-600">
+            <p className="mt-1 text-xs text-ocean-700">
               Per-assistance application volume and status mix for the selected reporting window.
             </p>
             {activeCategoryMonitor?.range?.label ? (
-              <p className="mt-1 text-[11px] font-medium text-ocean-500">
+              <p className="mt-1 text-[11px] font-medium text-ocean-700">
                 Viewing: {activeCategoryMonitor.range.label}
               </p>
             ) : null}
@@ -944,9 +930,7 @@ export function DashboardPage() {
                     }`}
                     style={
                       isActive
-                        ? {
-                            backgroundImage: `linear-gradient(to right, ${primary}, ${secondary})`,
-                          }
+                        ? { background: "var(--system-brand-gradient)" }
                         : undefined
                     }
                   >
@@ -958,7 +942,7 @@ export function DashboardPage() {
 
             {monitorPreset === "custom" ? (
               <div className="flex flex-wrap items-end gap-2">
-                <label className="text-[11px] text-ocean-600">
+                <label className="text-[11px] text-ocean-700">
                   From
                   <input
                     type="date"
@@ -969,11 +953,11 @@ export function DashboardPage() {
                         from: event.target.value,
                       }))
                     }
-                    className="mt-1 block rounded-lg border border-ocean-200 px-2 py-1.5 text-xs text-ocean-800 outline-none focus-visible:ring-2"
-                    style={{ accentColor: primary }}
+                    className="mt-1 block rounded-lg border border-ocean-200 px-2 py-1.5 text-xs text-ocean-800 outline-none focus-visible:ring-2 focus-visible:ring-ocean-500"
+                    style={{ accentColor: "var(--system-primary)" }}
                   />
                 </label>
-                <label className="text-[11px] text-ocean-600">
+                <label className="text-[11px] text-ocean-700">
                   To
                   <input
                     type="date"
@@ -984,16 +968,15 @@ export function DashboardPage() {
                         to: event.target.value,
                       }))
                     }
-                    className="mt-1 block rounded-lg border border-ocean-200 px-2 py-1.5 text-xs text-ocean-800 outline-none focus-visible:ring-2"
-                    style={{ accentColor: primary }}
+                    className="mt-1 block rounded-lg border border-ocean-200 px-2 py-1.5 text-xs text-ocean-800 outline-none focus-visible:ring-2 focus-visible:ring-ocean-500"
+                    style={{ accentColor: "var(--system-primary)" }}
                   />
                 </label>
                 <button
                   type="button"
                   onClick={handleApplyCustomMonitorRange}
                   disabled={loadingCustomMonitor}
-                  className="rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{ backgroundColor: primary }}
+                  className="rounded-lg bg-ocean-600 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {loadingCustomMonitor ? "Applying..." : "Apply Range"}
                 </button>
@@ -1012,7 +995,7 @@ export function DashboardPage() {
         !activeCategoryMonitor &&
         !loadingAnalytics &&
         !loadingCustomMonitor ? (
-          <p className="mb-3 text-xs text-ocean-600">
+          <p className="mb-3 text-xs text-ocean-700">
             Choose a date range and click Apply Range to load custom assistance statistics.
           </p>
         ) : null}
@@ -1027,7 +1010,7 @@ export function DashboardPage() {
                 />
               ))
             ) : !activeCategoryMonitor?.rows?.length ? (
-              <p className="py-2 text-xs text-ocean-600">
+              <p className="py-2 text-xs text-ocean-700">
                 No assistance activity for the selected reporting window.
               </p>
             ) : (
@@ -1047,7 +1030,7 @@ export function DashboardPage() {
                       const count = row.statuses?.[status] ?? 0;
                       return (
                         <div key={`${row.category_id}-${status}`} className="flex items-center justify-between gap-2">
-                          <span className="truncate text-[11px] text-ocean-600">{status}</span>
+                          <span className="truncate text-[11px] text-ocean-700">{status}</span>
                           <span
                             className={`tabular-nums text-[11px] ${
                               count > 0 ? "font-medium text-ocean-900" : "text-ocean-300"
@@ -1067,7 +1050,7 @@ export function DashboardPage() {
           <div className="hidden min-w-0 overflow-x-auto md:block">
             <table className="w-full min-w-[720px] text-xs">
               <thead>
-                <tr className="border-b border-ocean-100 text-left text-ocean-500">
+                <tr className="border-b border-ocean-100 text-left text-ocean-700">
                   <th className="sticky left-0 bg-white py-2 pr-3 font-semibold">Assistance</th>
                   <th className="px-2 py-2 text-right font-semibold">Applications</th>
                   {MONITOR_STATUS_COLUMNS.map((status) => (
@@ -1095,7 +1078,7 @@ export function DashboardPage() {
                   <tr>
                     <td
                       colSpan={MONITOR_STATUS_COLUMNS.length + 2}
-                      className="py-4 text-ocean-600"
+                      className="py-4 text-ocean-700"
                     >
                       No assistance activity for the selected reporting window.
                     </td>

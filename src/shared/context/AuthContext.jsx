@@ -688,7 +688,8 @@ export function AuthProvider({ children }) {
           category: s.displayName,
           displayName: s.displayName,
         })),
-        serviceIds: global.services.map((s) => s.serviceId).filter(Boolean),
+        querySources: global.querySources,
+        serviceIds: global.serviceIds,
         catalogServices: global.services,
         attachmentCatalog: global.attachmentCatalog,
       };
