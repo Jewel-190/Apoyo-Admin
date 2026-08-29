@@ -13,7 +13,7 @@ import { useAuth } from "../shared/context/AuthContext";
 // a page reload can't trivially reset it. Real rate limiting is enforced by
 // Supabase Auth server-side; this is a UX guard on top of that.
 const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_DURATION_MS = 15_000;
+const LOCKOUT_DURATION_MS = 5 * 60 * 1000;
 const ATTEMPTS_KEY = "apoyo_admin_login_attempts";
 const LOCK_UNTIL_KEY = "apoyo_admin_login_lock_until";
 

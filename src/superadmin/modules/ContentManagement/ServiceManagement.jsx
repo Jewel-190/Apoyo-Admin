@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Plus, Trash2, X } from "lucide-react";
 import { getHomeCardStripeGradient } from "../../../shared/lib/assistanceCategoryTheme.js";
+import { sanitizeCmsHtml } from "../../../shared/lib/sanitizeHtml";
 
 export const editorFonts = [
   { label: "Inter", value: "Inter, ui-sans-serif, system-ui, sans-serif" },
@@ -276,7 +277,7 @@ const markdownToHtml = (text = "") =>
 const normalizeRichTextHtml = (text = "") => {
   const safeText = toSafeString(text);
   if (!safeText) return "";
-  return isHtmlRichText(safeText) ? safeText : markdownToHtml(safeText);
+  return isHtmlRichText(safeText) ? sanitizeCmsHtml(safeText) : markdownToHtml(safeText);
 };
 
 export const stripRichText = (text = "") => {

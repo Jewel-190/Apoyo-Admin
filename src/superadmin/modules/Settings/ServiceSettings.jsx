@@ -9,6 +9,7 @@ import {
   normalizeBarangayName,
   updateBarangay,
 } from "../../../shared/lib/barangays";
+import { sanitizeCmsHtml } from "../../../shared/lib/sanitizeHtml";
 import {
   INTERVIEW_SCHEDULING_DEFAULTS,
   INTERVIEW_SCHEDULING_KEY,
@@ -85,7 +86,7 @@ const markdownToHtml = (text = "") =>
 
 const normalizeRichTextHtml = (text = "") => {
   if (!text) return "";
-  return isHtmlRichText(text) ? text : markdownToHtml(text);
+  return isHtmlRichText(text) ? sanitizeCmsHtml(text) : markdownToHtml(text);
 };
 
 function applyWrap(textarea, before, after = before) {

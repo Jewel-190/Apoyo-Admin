@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient";
 import { getSessionCachedQuery, invalidateSessionCacheByPrefix } from "./querySessionCache";
+import { applicantDisplayNameFromRequest, APPLICANT_SNAPSHOT_SELECT } from "./applicantSnapshot";
 
 export const STATUS_LABELS = {
   draft: "Draft",
@@ -181,7 +182,7 @@ export function buildDisplayName(user) {
 }
 
 const REQUEST_LIST_SELECT =
-  "id, request_code, user_id, created_at, updated_at, submitted_at, status, case_study_date, service_id, service_name, assistance_name, category_slug, category_id";
+  `id, request_code, user_id, created_at, updated_at, submitted_at, status, case_study_date, service_id, service_name, assistance_name, category_slug, category_id, ${APPLICANT_SNAPSHOT_SELECT}`;
 
 function requestServiceLabel(row, meta) {
   const snapshot = String(row?.service_name ?? "").trim();
@@ -403,25 +404,6 @@ async function fetchApplicationsBySourcesUncached(sources) {
     throw error;
   }
 
-  const userIds = [
-    ...new Set((rows || []).map((row) => row.user_id).filter(Boolean)),
-  ];
-
-  let usersById = {};
-
-  if (userIds.length > 0) {
-    const { data: usersData, error: usersError } = await supabase
-      .from("users")
-      .select("id, first_name, middle_name, last_name, suffix")
-      .in("id", userIds);
-
-    if (usersError) {
-      throw usersError;
-    }
-
-    usersById = Object.fromEntries((usersData || []).map((user) => [user.id, user]));
-  }
-
   return (rows || [])
     .map((row) => {
       const meta = metaByServiceId[row.service_id] || {};
@@ -433,7 +415,7 @@ async function fetchApplicationsBySourcesUncached(sources) {
         requestId: row.id,
         requestCode: row.request_code || row.id,
         userId: row.user_id,
-        name: buildDisplayName(usersById[row.user_id]),
+        name: applicantDisplayNameFromRequest(row),
         category: requestServiceLabel(row, meta),
         date: formatDate(row.submitted_at || row.created_at),
         submittedAt: row.submitted_at || null,
@@ -677,6 +659,48 @@ async function findApplicantUserIdsForSearch(searchTerm) {
     .map((user) => user.id);
 }
 
+async function findRequestIdsForApplicantSnapshotSearch(searchTerm) {
+  const query = String(searchTerm || "").trim().toLowerCase();
+  if (query.length < 2) {
+    return [];
+  }
+
+  const tokens = query.split(/\s+/).filter(Boolean).slice(0, 5);
+  if (tokens.length === 0) {
+    return [];
+  }
+
+  const orParts = [];
+  for (const token of tokens) {
+    const pattern = quotePostgrestValue(`%${escapeIlikePattern(token)}%`);
+    orParts.push(
+      `applicant_first_name.ilike.${pattern}`,
+      `applicant_middle_name.ilike.${pattern}`,
+      `applicant_last_name.ilike.${pattern}`,
+      `applicant_suffix.ilike.${pattern}`
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("assistance_requests")
+    .select(
+      "id, applicant_first_name, applicant_middle_name, applicant_last_name, applicant_suffix"
+    )
+    .or(orParts.join(","))
+    .limit(APPROVED_USER_SEARCH_LIMIT);
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || [])
+    .filter((row) => {
+      const haystack = applicantDisplayNameFromRequest(row, "").toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
+    })
+    .map((row) => row.id);
+}
+
 /**
  * Server-paginated Archive queue (approved + declined). Never loads the full set into memory.
  * Search matches application ID, applicant name, and application date across the whole dataset.
@@ -722,9 +746,11 @@ export async function fetchArchiveApplicationsPage({
   let safePage = Math.max(1, Math.floor(page) || 1);
   const searchTerm = String(search || "").trim();
   let matchingUserIds = [];
+  let matchingSnapshotRequestIds = [];
   const dateRange = searchTerm ? parseApprovedSearchDateRange(searchTerm) : null;
   if (searchTerm) {
     matchingUserIds = await findApplicantUserIdsForSearch(searchTerm);
+    matchingSnapshotRequestIds = await findRequestIdsForApplicantSnapshotSearch(searchTerm);
   }
 
   const rangeFrom =
@@ -764,6 +790,9 @@ export async function fetchArchiveApplicationsPage({
       if (matchingUserIds.length > 0) {
         orParts.push(`user_id.in.(${matchingUserIds.join(",")})`);
       }
+      if (matchingSnapshotRequestIds.length > 0) {
+        orParts.push(`id.in.(${matchingSnapshotRequestIds.join(",")})`);
+      }
       nextQuery = nextQuery.or(orParts.join(","));
     }
 
@@ -793,24 +822,6 @@ export async function fetchArchiveApplicationsPage({
     }
   }
 
-  const userIds = [
-    ...new Set((rows || []).map((row) => row.user_id).filter(Boolean)),
-  ];
-
-  let usersById = {};
-  if (userIds.length > 0) {
-    const { data: usersData, error: usersError } = await supabase
-      .from("users")
-      .select("id, first_name, middle_name, last_name, suffix")
-      .in("id", userIds);
-
-    if (usersError) {
-      throw usersError;
-    }
-
-    usersById = Object.fromEntries((usersData || []).map((user) => [user.id, user]));
-  }
-
   const applications = (rows || []).map((row) => {
     const meta = metaByServiceId[row.service_id] || {};
     const rowServiceId = row.service_id || meta.serviceId || "";
@@ -821,7 +832,7 @@ export async function fetchArchiveApplicationsPage({
       requestId: row.id,
       requestCode: row.request_code || row.id,
       userId: row.user_id,
-      name: buildDisplayName(usersById[row.user_id]),
+      name: applicantDisplayNameFromRequest(row),
       category: requestServiceLabel(row, meta),
       date: formatDate(row.submitted_at || row.created_at),
       submittedAt: row.submitted_at || null,

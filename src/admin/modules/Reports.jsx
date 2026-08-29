@@ -436,11 +436,11 @@ export default function Reports() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between mb-5">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <h1
+        <h1
               className="text-2xl"
-              style={{
-                fontFamily: "'Instrument Sans', sans-serif",
-                fontWeight: 500,
+          style={{
+            fontFamily: "'Instrument Sans', sans-serif",
+            fontWeight: 500,
               }}
             >
               <span
@@ -448,12 +448,12 @@ export default function Reports() {
                   background: `linear-gradient(to right, ${primary}, ${secondary})`,
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
-                }}
-              >
-                Reports
+          }}
+        >
+          Reports
               </span>
               <span className="text-gray-800"> &amp; Exports</span>
-            </h1>
+        </h1>
             {showContentSkeleton ? (
               <HeaderMetaSkeleton />
             ) : (
@@ -546,7 +546,7 @@ export default function Reports() {
                   >
                     <Icon size={13} />
                     {format.value === "xlsx" ? "Excel" : "CSV"}
-                  </button>
+              </button>
                 );
               })}
             </div>

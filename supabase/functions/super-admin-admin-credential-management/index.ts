@@ -1,5 +1,6 @@
 import { authorizeRequest, getServiceClient } from "../_shared/client.ts";
 import { jsonResponse, preflight } from "../_shared/cors.ts";
+import { AUDIT_MODULES, createAuditor } from "../_shared/auditTrail.ts";
 
 type CredentialsPayload = {
   action?: "create" | "update" | "delete";
@@ -65,6 +66,8 @@ Deno.serve(async (req) => {
       return superAdminCheck.response;
     }
 
+    const auditor = createAuditor(supabase, req, auth.userId);
+
     let payload: CredentialsPayload;
     try {
       payload = (await req.json()) as CredentialsPayload;
@@ -128,6 +131,14 @@ Deno.serve(async (req) => {
         throw insertAdminError;
       }
 
+      await auditor.record({
+        action: "create",
+        module: AUDIT_MODULES.DATA_ADMINS,
+        resourceType: "admin",
+        resourceId: createdUserId,
+        summary: `Created line admin ${email}`,
+        metadata: { categoryId },
+      });
       return jsonResponse({
         success: true,
         action: "create",
@@ -168,6 +179,14 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: deleteError.message }, 400);
       }
 
+      await auditor.record({
+        action: "delete",
+        module: AUDIT_MODULES.DATA_ADMINS,
+        resourceType: "admin",
+        resourceId: userId,
+        summary: `Deleted line admin ${userId}`,
+        metadata: { categoryId: adminRow.category_id },
+      });
       return jsonResponse({
         success: true,
         action: "delete",
@@ -213,6 +232,14 @@ Deno.serve(async (req) => {
     );
     if (refreshedError) throw refreshedError;
 
+    await auditor.record({
+      action: "update",
+      module: AUDIT_MODULES.DATA_ADMINS,
+      resourceType: "admin",
+      resourceId: userId,
+      summary: `Updated line admin credentials ${refreshedAuth?.user?.email ?? email ?? userId}`,
+      metadata: { emailChanged: Boolean(email), passwordChanged: Boolean(password) },
+    });
     return jsonResponse({
       success: true,
       action: "update",

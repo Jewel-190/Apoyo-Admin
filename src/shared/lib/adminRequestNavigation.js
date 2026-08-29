@@ -1,5 +1,6 @@
-import { normalizeStatus, formatDate, buildDisplayName } from "./requestData";
+import { normalizeStatus, formatDate } from "./requestData";
 import { supabase } from "./supabaseClient";
+import { applicantDisplayNameFromRequest, APPLICANT_SNAPSHOT_SELECT } from "./applicantSnapshot";
 
 /**
  * Map a request status to the admin module that owns that queue.
@@ -60,7 +61,7 @@ export async function fetchAdminApplicationByRequestId(
 
   let reqQuery = supabase
     .from("assistance_requests")
-    .select("id, request_code, user_id, created_at, submitted_at, status, service_id")
+    .select(`id, request_code, user_id, created_at, submitted_at, status, service_id, ${APPLICANT_SNAPSHOT_SELECT}`)
     .eq("id", requestId);
 
   if (allowedServiceIds?.length > 0) {
@@ -81,15 +82,7 @@ export async function fetchAdminApplicationByRequestId(
     .eq("id", requestRow.service_id)
     .maybeSingle();
 
-  let applicantName = "Unknown Applicant";
-  if (requestRow.user_id) {
-    const { data: userRow } = await supabase
-      .from("users")
-      .select("first_name, middle_name, last_name, suffix")
-      .eq("id", requestRow.user_id)
-      .maybeSingle();
-    applicantName = buildDisplayName(userRow);
-  }
+  const applicantName = applicantDisplayNameFromRequest(requestRow);
 
   const submittedAt = requestRow.submitted_at || null;
   const createdAt = requestRow.created_at || null;

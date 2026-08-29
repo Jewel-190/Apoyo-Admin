@@ -31,6 +31,7 @@ import {
   canAutoTransitionToInProgress,
   normalizeStatus as normalizeRequestStatus,
 } from "../../../shared/domain/status";
+import { applicantRecordFromRequest } from "../../../shared/lib/applicantSnapshot";
 import {
   ADMIN_DOCUMENT_ACCENT_COLORS,
   getAdminDocumentResultBadgeStyle,
@@ -170,16 +171,23 @@ function normalizeAttachmentObjectPath(pathValue) {
   return normalized;
 }
 
-function buildAttachmentImageUrl(objectPath) {
+const ATTACHMENT_SIGNED_URL_TTL_SEC = 8 * 60 * 60;
+
+async function buildAttachmentImageUrl(objectPath) {
   if (!objectPath) {
     return "";
   }
 
-  const { data } = supabase.storage
+  const { data, error } = await supabase.storage
     .from(ATTACHMENT_BUCKET)
-    .getPublicUrl(objectPath);
+    .createSignedUrl(objectPath, ATTACHMENT_SIGNED_URL_TTL_SEC);
 
-  return data?.publicUrl || "";
+  if (!error && data?.signedUrl) {
+    return data.signedUrl;
+  }
+
+  const { data: pub } = supabase.storage.from(ATTACHMENT_BUCKET).getPublicUrl(objectPath);
+  return pub?.publicUrl || "";
 }
 
 function resolveAttachmentName(attachment, objectPath, index) {
@@ -355,7 +363,7 @@ function sortAttachments(data) {
   });
 }
 
-function mapAttachments(rows, serviceId, catalog) {
+async function mapAttachments(rows, serviceId, catalog) {
   const mapped = sortAttachments(rows).map((row, index) => {
     const objectPath = normalizeAttachmentObjectPath(getFirstValue(row, ["path"], ""));
     const fileName = resolveAttachmentName(row, objectPath, index);
@@ -379,7 +387,7 @@ function mapAttachments(rows, serviceId, catalog) {
       _hierarchyRank: getAttachmentHierarchyRank(catalog, serviceId, fieldKey, label),
       _orderIndex: index,
       objectPath,
-      imageUrl: buildAttachmentImageUrl(objectPath),
+      imageUrl: "",
       label,
       fileName,
       name: label,
@@ -394,7 +402,7 @@ function mapAttachments(rows, serviceId, catalog) {
     };
   });
 
-  return mapped
+  const ranked = mapped
     .sort((a, b) => {
       if (a._hierarchyRank !== b._hierarchyRank) {
         return a._hierarchyRank - b._hierarchyRank;
@@ -403,6 +411,13 @@ function mapAttachments(rows, serviceId, catalog) {
       return a._orderIndex - b._orderIndex;
     })
     .map(({ _hierarchyRank, _orderIndex, ...doc }) => doc);
+
+  return Promise.all(
+    ranked.map(async (doc) => ({
+      ...doc,
+      imageUrl: await buildAttachmentImageUrl(doc.objectPath),
+    }))
+  );
 }
 
 function isPdfAttachment(doc) {
@@ -703,12 +718,15 @@ function ReviewApplications({
           return;
         }
 
+        const snapshotApplicant = applicantRecordFromRequest(requestRow);
         const userId = requestRow?.user_id || application.userId;
 
         const [requesterResult, attachmentsResult] = await Promise.all([
-          userId
-            ? supabase.from("users").select("*").eq("id", userId).maybeSingle()
-            : Promise.resolve({ data: null, error: null }),
+          snapshotApplicant
+            ? Promise.resolve({ data: snapshotApplicant, error: null })
+            : userId
+              ? supabase.from("users").select("*").eq("id", userId).maybeSingle()
+              : Promise.resolve({ data: null, error: null }),
           fetchRequestAttachments(application.serviceId, application.requestId),
         ]);
 
@@ -761,7 +779,7 @@ function ReviewApplications({
           ).catch(() => {});
         }
 
-        const nextDocuments = mapAttachments(
+        const nextDocuments = await mapAttachments(
           attachmentsResult.data || [],
           application.serviceId,
           attachmentCatalog

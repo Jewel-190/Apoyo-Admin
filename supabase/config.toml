@@ -151,9 +151,27 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+site_url = "https://admin.apoyo-dasma.online"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+additional_redirect_urls = [
+  "http://127.0.0.1:5173",
+  "http://localhost:5173",
+  "http://127.0.0.1:5174",
+  "http://localhost:5174",
+  "http://127.0.0.1:4173",
+  "http://127.0.0.1:4174",
+  "http://localhost:4173",
+  "http://localhost:4174",
+  "http://192.168.18.2:5173",
+  "http://192.168.18.2:5174",
+  "https://admin.apoyo-dasma.online",
+  "https://www.apoyo-dasma.online",
+  "https://apoyo-dasma.online",
+  "apoyo://auth-callback",
+  "apoyo://auth/callback",
+  "apoyocapstone://auth-callback",
+  "apoyocapstone://auth/callback",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).
@@ -171,7 +189,8 @@ enable_signup = true
 enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
 enable_manual_linking = false
-# Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
+# Passwords shorter than this value will be rejected as weak. Minimum 6.
+# Kept at 6 so the mobile app 6-digit MPIN (GoTrue password) still works.
 minimum_password_length = 6
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
@@ -179,7 +198,7 @@ password_requirements = ""
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
-email_sent = 2
+email_sent = 30
 # Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
 sms_sent = 30
 # Number of anonymous sign-ins that can be made per hour per IP address. Requires enable_anonymous_sign_ins = true.
@@ -187,7 +206,7 @@ anonymous_users = 30
 # Number of sessions that can be refreshed in a 5 minute interval per IP address.
 token_refresh = 150
 # Number of sign up and sign-in requests that can be made in a 5 minute interval per IP address (excludes anonymous users).
-sign_in_sign_ups = 30
+sign_in_sign_ups = 15
 # Number of OTP / Magic link verifications that can be made in a 5 minute interval per IP address.
 token_verifications = 30
 # Number of Web3 logins that can be made in a 5 minute interval per IP address.
@@ -206,7 +225,7 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
@@ -216,20 +235,24 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Use a production-ready SMTP server
-# [auth.email.smtp]
-# enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# Resend SMTP for registration confirmation and MPIN recovery.
+# Set RESEND_API_KEY in supabase/.env (gitignored).
+[auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "noreply@apoyo-dasma.online"
+sender_name = "Apoyo"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+[auth.email.template.confirmation]
+subject = "Confirm your Apoyo email"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Your Apoyo MPIN reset code"
+content_path = "./supabase/templates/recovery.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
@@ -365,8 +388,10 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+# Injected into edge functions. FACE_VERIFY_* live in supabase/.env (gitignored).
+[edge_runtime.secrets]
+FACE_VERIFY_SERVICE_URL = "env(FACE_VERIFY_SERVICE_URL)"
+FACE_VERIFY_SERVICE_KEY = "env(FACE_VERIFY_SERVICE_KEY)"
 
 [analytics]
 enabled = true
@@ -397,4 +422,10 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 
 # Mixed public/admin gateway — auth is enforced per action inside the function.
 [functions.web]
+verify_jwt = false
+
+[functions.facial-verification]
+verify_jwt = false
+
+[functions.id-document-verification]
 verify_jwt = false

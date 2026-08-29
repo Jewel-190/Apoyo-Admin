@@ -1,5 +1,7 @@
 import { authorizeRequest, getServiceClient, ServiceClient } from "../_shared/client.ts";
 import { jsonResponse, preflight } from "../_shared/cors.ts";
+import { AUDIT_MODULES, writeAuditEvent } from "../_shared/auditTrail.ts";
+import { applicantDisplayNameFromRequest, APPLICANT_SNAPSHOT_SELECT } from "../_shared/applicantSnapshot.ts";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
 /**
@@ -78,6 +80,10 @@ interface RequestRow {
   created_at: string | null;
   updated_at: string | null;
   case_study_date: string | null;
+  applicant_first_name?: string | null;
+  applicant_middle_name?: string | null;
+  applicant_last_name?: string | null;
+  applicant_suffix?: string | null;
 }
 
 interface AuditRow {
@@ -252,7 +258,8 @@ async function fetchRequests(
     const { data, error } = await supabase
       .from("assistance_requests")
       .select(
-        "id, request_code, user_id, service_id, category_id, service_name, assistance_name, status, submitted_at, created_at, updated_at, case_study_date"
+        "id, request_code, user_id, service_id, category_id, service_name, assistance_name, status, submitted_at, created_at, updated_at, case_study_date, " +
+          APPLICANT_SNAPSHOT_SELECT
       )
       .in("service_id", serviceIds)
       .neq("status", "draft")
@@ -384,8 +391,7 @@ async function fetchPlatformCounts(supabase: ServiceClient) {
 function buildAppRecords(
   rows: RequestRow[],
   services: ServiceRow[],
-  categories: CategoryRow[],
-  namesById: Record<string, string>
+  categories: CategoryRow[]
 ): AppRecord[] {
   const serviceById = new Map<string, ServiceRow>();
   for (const service of services) serviceById.set(String(service.id), service);
@@ -403,7 +409,7 @@ function buildAppRecords(
     return {
       requestId: row.id,
       code: row.request_code || row.id,
-      applicant: namesById[String(row.user_id ?? "")] || "Unknown Applicant",
+      applicant: applicantDisplayNameFromRequest(row as Record<string, unknown>),
       categoryId,
       line: snapshotAssistance || category?.assistance_name || "Unassigned assistance",
       service: snapshotService || service?.display_name || "Request",
@@ -868,11 +874,7 @@ Deno.serve(async (req) => {
     const serviceIds = scopedServices.map((s) => String(s.id));
 
     const requestRows = await fetchRequests(supabase, serviceIds);
-    const namesById = await fetchUserNames(
-      supabase,
-      requestRows.map((row) => String(row.user_id ?? "")).filter(Boolean)
-    );
-    const allApps = buildAppRecords(requestRows, scopedServices, scopedCategories, namesById);
+    const allApps = buildAppRecords(requestRows, scopedServices, scopedCategories);
     const apps = filterByRange(allApps, startIso, endIso);
 
     const rangeLabel = formatRangeLabel(startIso, endIso);
@@ -986,6 +988,18 @@ Deno.serve(async (req) => {
         format === "csv"
           ? "text/csv;charset=utf-8"
           : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+      if (!auth.viaSecret && auth.userId) {
+        await writeAuditEvent(supabase, req, {
+          actorId: auth.userId,
+          action: "export",
+          module: AUDIT_MODULES.REPORTS,
+          resourceType: "report",
+          resourceId: reportId,
+          summary: `Exported report ${REPORT_TITLES[reportId] || reportId} (${format})`,
+          metadata: { format, recordCount: report.recordCount },
+        });
+      }
 
       return jsonResponse({
         success: true,

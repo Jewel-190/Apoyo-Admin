@@ -397,7 +397,7 @@ export function Reports() {
     <section className="-m-2 space-y-4 sm:-m-3 lg:-m-4">
       {/* Header */}
       <div className="overflow-hidden rounded-[26px] border border-ocean-200 bg-gradient-to-b from-ocean-700 via-ocean-800 to-ocean-900 p-5 text-white">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ocean-200">
               Super Admin
@@ -481,10 +481,10 @@ export function Reports() {
             <div className="ml-auto flex items-center gap-1 rounded-lg border border-ocean-200 p-0.5">
               {EXPORT_FORMATS.map((format) => {
                 const isActive = exportFormat === format.value;
-                return (
-                  <button
+              return (
+                <button
                     key={format.value}
-                    type="button"
+                  type="button"
                     onClick={() => setExportFormat(format.value)}
                     disabled={showContentSkeleton}
                     className={`rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
@@ -493,11 +493,11 @@ export function Reports() {
                     title={format.label}
                   >
                     {format.value === "xlsx" ? "Excel" : "CSV"}
-                  </button>
-                );
-              })}
-            </div>
+                </button>
+              );
+            })}
           </div>
+        </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
             {RANGE_PRESETS.map((option) => {
@@ -515,9 +515,9 @@ export function Reports() {
                   }`}
                 >
                   {option.label}
-                </button>
-              );
-            })}
+                    </button>
+                  );
+                })}
             {showContentSkeleton ? (
               <RangeLabelSkeleton />
             ) : (
@@ -565,19 +565,19 @@ export function Reports() {
           {customRangeError ? (
             <p className="text-xs text-red-600">{customRangeError}</p>
           ) : null}
-        </div>
+              </div>
 
         {loadError ? (
           <div className="mt-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
             {loadError}
-          </div>
-        ) : null}
+                </div>
+              ) : null}
 
         {exportNotice ? (
           <div className="mt-4 rounded-lg border border-ocean-200 bg-ocean-50 px-3 py-2 text-sm text-ocean-800">
             {exportNotice}
-          </div>
-        ) : null}
+        </div>
+      ) : null}
 
         {showCustomPrompt ? (
           <p className="py-10 text-center text-sm text-ocean-700">
@@ -595,7 +595,7 @@ export function Reports() {
               const count = summary?.countsById?.[report.id] ?? 0;
               const isEmpty = count === 0;
               const isExporting = exportingId === report.id;
-              return (
+  return (
                 <div
                   key={report.id}
                   className="flex flex-col rounded-2xl border border-ocean-200 bg-white p-4 transition hover:shadow-[0_16px_36px_-24px_rgba(var(--system-primary-rgb),0.55)]"
@@ -603,14 +603,14 @@ export function Reports() {
                   <div className="flex items-start gap-3">
                     <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-ocean-50 text-lg">
                       {report.icon}
-                    </div>
+    </div>
                     <div className="min-w-0">
                       <h2 className="text-sm font-semibold text-ocean-950">{report.title}</h2>
                       <p className="mt-0.5 text-xs leading-relaxed text-ocean-700">
                         {report.description}
                       </p>
-                    </div>
-                  </div>
+        </div>
+      </div>
 
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <span className="text-xs text-ocean-700">
@@ -619,8 +619,8 @@ export function Reports() {
                       </span>{" "}
                       {report.unit}
                     </span>
-                    <button
-                      type="button"
+              <button
+                type="button"
                       onClick={() => handleExport(report)}
                       disabled={isEmpty || isExporting}
                       className="inline-flex items-center gap-2 rounded-lg bg-ocean-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-ocean-800 disabled:cursor-not-allowed disabled:opacity-40"
@@ -631,14 +631,14 @@ export function Reports() {
                       }
                     >
                       {isExporting ? "Exporting…" : "Export"}
-                    </button>
-                  </div>
-                </div>
+              </button>
+            </div>
+            </div>
               );
             })}
           </div>
         )}
-      </div>
+        </div>
     </section>
   );
 }

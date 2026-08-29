@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { BrandChrome } from "../../shared/components/BrandChrome";
 import { useAuth } from "../../shared/context/AuthContext";
+import { useSuperAdminNotifications } from "../../shared/context/SuperAdminNotificationContext";
+import { formatUnreadBadge } from "../../shared/lib/superAdminNotificationsApi";
 
 const Chevron = ({ open }) => (
   <svg
@@ -144,6 +146,7 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
   const location = useLocation();
   const pathname = location.pathname;
   const { signOut } = useAuth();
+  const { unreadCount } = useSuperAdminNotifications();
   const navigate = useNavigate();
 
   const defaultOpen = useMemo(() => {
@@ -210,7 +213,7 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
                     to={item.path}
                     onClick={onMobileClose}
                     className={({ isActive }) =>
-                      `flex w-full items-center rounded-xl px-3 py-2.5 text-left text-[14px] transition-colors duration-150 ${
+                      `flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-[14px] transition-colors duration-150 ${
                         isActive
                           ? "bg-white/[0.14] font-semibold text-white ring-1 ring-white/20"
                           : "font-medium text-ocean-100/90 hover:bg-white/[0.06] hover:text-white"
@@ -218,7 +221,12 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
                     }
                     end
                   >
-                    {item.label}
+                    <span>{item.label}</span>
+                    {item.path === "/superadmin/notifications" && unreadCount > 0 ? (
+                      <span className="inline-flex min-w-[1.15rem] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold leading-4 text-white">
+                        {formatUnreadBadge(unreadCount)}
+                      </span>
+                    ) : null}
                   </NavLink>
                 </li>
               );

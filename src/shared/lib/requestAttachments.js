@@ -65,13 +65,23 @@ export function normalizeAttachmentObjectPath(pathValue) {
   return normalized;
 }
 
-export function buildAttachmentImageUrl(objectPath) {
+const ATTACHMENT_SIGNED_URL_TTL_SEC = 8 * 60 * 60;
+
+export async function buildAttachmentImageUrl(objectPath) {
   if (!objectPath) {
     return "";
   }
 
-  const { data } = supabase.storage.from(ATTACHMENT_BUCKET).getPublicUrl(objectPath);
-  return data?.publicUrl || "";
+  const { data, error } = await supabase.storage
+    .from(ATTACHMENT_BUCKET)
+    .createSignedUrl(objectPath, ATTACHMENT_SIGNED_URL_TTL_SEC);
+
+  if (!error && data?.signedUrl) {
+    return data.signedUrl;
+  }
+
+  const { data: pub } = supabase.storage.from(ATTACHMENT_BUCKET).getPublicUrl(objectPath);
+  return pub?.publicUrl || "";
 }
 
 function resolveAttachmentName(attachment, objectPath, index) {
@@ -245,7 +255,7 @@ export async function fetchRequestAttachments(requestId) {
 /**
  * Map DB attachment rows into UI document objects (labels, URLs, review status).
  */
-export function mapAttachments(rows, serviceId, catalog) {
+export async function mapAttachments(rows, serviceId, catalog) {
   const mapped = sortAttachments(rows).map((row, index) => {
     const objectPath = normalizeAttachmentObjectPath(getFirstValue(row, ["path"], ""));
     const fileName = resolveAttachmentName(row, objectPath, index);
@@ -269,7 +279,7 @@ export function mapAttachments(rows, serviceId, catalog) {
       _hierarchyRank: attachmentHierarchyRank(catalog, serviceId, fieldKey, label),
       _orderIndex: index,
       objectPath,
-      imageUrl: buildAttachmentImageUrl(objectPath),
+      imageUrl: "",
       label,
       fileName,
       name: label,
@@ -284,7 +294,7 @@ export function mapAttachments(rows, serviceId, catalog) {
     };
   });
 
-  return mapped
+  const ranked = mapped
     .sort((a, b) => {
       if (a._hierarchyRank !== b._hierarchyRank) {
         return a._hierarchyRank - b._hierarchyRank;
@@ -292,6 +302,13 @@ export function mapAttachments(rows, serviceId, catalog) {
       return a._orderIndex - b._orderIndex;
     })
     .map(({ _hierarchyRank, _orderIndex, ...doc }) => doc);
+
+  return Promise.all(
+    ranked.map(async (doc) => ({
+      ...doc,
+      imageUrl: await buildAttachmentImageUrl(doc.objectPath),
+    }))
+  );
 }
 
 export function isPdfAttachment(doc) {

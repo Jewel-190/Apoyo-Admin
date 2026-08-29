@@ -1,17 +1,4 @@
--- Navbar search placeholder and menu aria copy are locked in public-site code.
-
-begin;
-
-update public.web_content
-set content = jsonb_set(
-  content,
-  '{navbar}',
-  coalesce(content -> 'navbar', '{}'::jsonb)
-    - 'searchPlaceholder'
-    - 'openMenuAria'
-    - 'closeMenuAria'
-)
-where page = 'global'
-  and content ? 'navbar';
-
-commit;
+-- No-op on empty local databases.
+-- Schema is applied by 202603310001 (linked public snapshot).
+-- This version is already applied on the remote project.
+select 1;

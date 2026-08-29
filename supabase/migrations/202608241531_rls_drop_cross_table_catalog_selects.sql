@@ -27,6 +27,7 @@ grant execute on function public.rls_can_select_requirement_tip(uuid) to authent
 drop policy if exists assistance_services_select on public.assistance_services;
 drop policy if exists assistance_requirements_select on public.assistance_requirements;
 drop policy if exists assistance_requirement_tips_select on public.assistance_requirement_tips;
+drop policy if exists assistance_requirement_tips_select_history on public.assistance_requirement_tips;
 
 create policy assistance_requirement_tips_select_history
   on public.assistance_requirement_tips

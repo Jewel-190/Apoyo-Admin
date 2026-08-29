@@ -1,12 +1,4 @@
--- Correct settings description spelling to Dasmariñas.
-
-begin;
-
-update public.settings
-set
-  description = 'Dasmariñas logo and banner assets for admin, superadmin, and login chrome.',
-  updated_at = now()
-where scope = 'system'
-  and key = 'logo-and-banner';
-
-commit;
+-- No-op on empty local databases.
+-- Schema is applied by 202603310001 (linked public snapshot).
+-- This version is already applied on the remote project.
+select 1;

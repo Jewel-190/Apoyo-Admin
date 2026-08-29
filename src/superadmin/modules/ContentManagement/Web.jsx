@@ -28,6 +28,7 @@ import {
   normalizeHexColor,
   pickWebTheme,
 } from "../../../shared/lib/webTheme";
+import { sanitizeCmsHtml } from "../../../shared/lib/sanitizeHtml";
 
 /* ------------------------------------------------------------------ */
 /* Rich text (lightweight markdown) helpers                            */
@@ -54,7 +55,7 @@ const markdownToHtml = (text = "") =>
 
 const normalizeRichTextHtml = (text = "") => {
   if (!text) return "";
-  return isHtmlRichText(text) ? text : markdownToHtml(text);
+  return isHtmlRichText(text) ? sanitizeCmsHtml(text) : markdownToHtml(text);
 };
 
 function applyWrap(textarea, before, after = before) {
@@ -519,7 +520,7 @@ function RichTextField({ label, value, onChange, placeholder, rows = 3 }) {
           >
             Preview
         </button>
-        </div>
+      </div>
         <textarea
           ref={ref}
           rows={rows}
@@ -664,7 +665,7 @@ function Repeater({ label, value, fields, newItem, itemTitle, onChange, defaultO
                   {pinned ? (
                     <span className="rounded-md bg-ocean-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ocean-700">
                       Always bottom
-                    </span>
+            </span>
                   ) : null}
         </button>
                 <button type="button" onClick={() => move(idx, -1)} className={TOOL_BTN} title="Move up" disabled={!canUp}>↑</button>
@@ -673,7 +674,7 @@ function Repeater({ label, value, fields, newItem, itemTitle, onChange, defaultO
                   onConfirm={() => remove(idx)}
                   className="inline-flex h-8 items-center rounded-lg border border-rose-200 bg-rose-50 px-2.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-100"
                 />
-              </div>
+          </div>
               {open ? (
                 <div className="border-t border-ocean-100 p-3">
                   <GroupFields fields={fields} value={item} onChange={(v) => update(idx, v)} />
@@ -682,15 +683,15 @@ function Repeater({ label, value, fields, newItem, itemTitle, onChange, defaultO
             </div>
           );
         })}
-        <button
-          type="button"
+          <button
+            type="button"
           onClick={add}
           className="inline-flex h-9 items-center rounded-lg border border-dashed border-ocean-300 bg-white px-3 text-xs font-semibold text-ocean-700 transition hover:border-ocean-400 hover:bg-ocean-50"
-        >
+          >
           + Add entry
-        </button>
-      </div>
-    </div>
+          </button>
+        </div>
+          </div>
   );
 }
 
@@ -729,7 +730,7 @@ function ThemeColorField({ value, onChange }) {
             className="h-9 min-w-0 flex-1 rounded-lg border border-ocean-200 bg-white px-2.5 font-mono text-xs font-semibold uppercase text-ocean-900 outline-none transition focus:border-ocean-400 focus:ring-2 focus:ring-ocean-200/70"
           />
         </div>
-      </div>
+          </div>
 
       <div className="rounded-xl border border-ocean-100 bg-white p-3" style={previewVars}>
         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-ocean-700">Live preview</p>
@@ -743,7 +744,7 @@ function ThemeColorField({ value, onChange }) {
           <span className="text-xs font-semibold" style={{ color: "var(--web-primary)" }}>
             Link
           </span>
-        </div>
+                  </div>
         <div
           className="mt-3 h-10 rounded-lg"
           style={{ background: "var(--web-brand-gradient)" }}
@@ -757,13 +758,13 @@ function ThemeColorField({ value, onChange }) {
                 title={`${step}: ${hex}`}
               />
               <p className="mt-1 text-center text-[10px] font-semibold text-ocean-700">{step}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
         <p className="mt-3 text-[11px] text-ocean-700">
           Preview uses the same derivation as the public website. Publish Site-wide to apply it.
         </p>
-      </div>
+          </div>
     </div>
   );
 }
@@ -805,7 +806,7 @@ function FieldControl({ field, value, onChange }) {
         <div className="rounded-xl border border-ocean-100 bg-ocean-50/40 p-3">
           {field.label ? <p className="mb-2 text-xs font-semibold text-ocean-800">{field.label}</p> : null}
           <GroupFields fields={field.fields} value={value} onChange={onChange} />
-        </div>
+            </div>
       );
     case "repeater":
       return (
@@ -839,10 +840,10 @@ function GroupFields({ fields, value, onChange }) {
         return (
           <div key={field.key} className={span ? "sm:col-span-2" : ""}>
             <FieldControl field={field} value={obj[field.key]} onChange={(v) => onChange({ ...obj, [field.key]: v })} />
-      </div>
+            </div>
         );
       })}
-    </div>
+            </div>
   );
 }
 
@@ -1608,8 +1609,8 @@ function ServicesPresentationsEditor({ value, onChange }) {
           return (
             <div key={item.catalogSlug || idx} className="overflow-hidden rounded-xl border border-ocean-200 bg-white">
               <div className="flex items-center gap-2 bg-ocean-50/60 px-3 py-2">
-          <button
-            type="button"
+                <button
+                  type="button"
                   onClick={() => toggleOpen(idx)}
                   className="flex flex-1 items-center gap-2 text-left text-sm font-semibold text-ocean-900"
                 >
@@ -1618,8 +1619,8 @@ function ServicesPresentationsEditor({ value, onChange }) {
                   <span className="rounded bg-ocean-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ocean-700">
                     {item.catalogSlug}
                   </span>
-          </button>
-        </div>
+                </button>
+            </div>
               {open ? (
                 <div className="border-t border-ocean-100 p-3">
                   <GroupFields
@@ -1629,7 +1630,7 @@ function ServicesPresentationsEditor({ value, onChange }) {
             />
           </div>
               ) : null}
-                  </div>
+          </div>
           );
         })}
                 </div>
@@ -1663,7 +1664,7 @@ function SectionCard({ section, value, onChange }) {
               ) : (
         <GroupFields fields={section.fields} value={value} onChange={onChange} />
       )}
-    </article>
+        </article>
   );
 }
 
@@ -1765,7 +1766,7 @@ export function Web() {
       {/* Header */}
       <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
+            <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">Content Management</p>
             <h2 className="mt-1 text-lg font-semibold tracking-tight text-ocean-950">Web Content</h2>
             <p className="mt-1 max-w-2xl text-xs text-ocean-700">
@@ -1784,7 +1785,7 @@ export function Web() {
                 {status.text}
             </span>
             ) : null}
-            </div>
+          </div>
         </div>
 
         {/* Page tabs */}
@@ -1792,9 +1793,9 @@ export function Web() {
           {PAGES.map((page) => {
             const isActive = page.id === activePage;
             return (
-                <button
+            <button
                 key={page.id}
-                  type="button"
+              type="button"
                 onClick={() => setActivePage(page.id)}
                 className={`group inline-flex flex-col rounded-xl border px-3.5 py-2 text-left transition ${
                   isActive
@@ -1809,10 +1810,10 @@ export function Web() {
                   ) : null}
                 </span>
                 <span className={`text-[11px] ${isActive ? "text-white/80" : "text-ocean-700"}`}>{page.hint}</span>
-                </button>
+            </button>
             );
           })}
-            </div>
+          </div>
       </section>
 
       {loading ? (

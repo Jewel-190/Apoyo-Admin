@@ -94,10 +94,20 @@ Deno.serve(async (request: Request) => {
     );
   }
 
+  const supabaseAdmin = createClient(PROJECT_URL, SERVICE_ROLE_KEY, {
+    auth: { persistSession: false },
+  });
+
   const expectedSecret = Deno.env.get("REQUEST_CODE_HOOK_SECRET") ?? "";
   if (expectedSecret) {
     const provided = request.headers.get("x-request-code-secret") ?? "";
     if (provided !== expectedSecret) {
+      return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
+    }
+  } else {
+    const token = request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+    if (userError || !userData?.user) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
   }
@@ -121,9 +131,6 @@ Deno.serve(async (request: Request) => {
   }
 
   const ts = parseTimestamp(payload.timestamp);
-  const supabaseAdmin = createClient(PROJECT_URL, SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
-  });
 
   const { data, error } = await supabaseAdmin.rpc(
     "generate_request_code_for_service",

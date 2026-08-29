@@ -7,11 +7,11 @@ import { DEFAULT_ADMIN_THEME } from "../../shared/config/roleConfig";
 import { getAdminActivityLogBorderColor } from "../../shared/lib/adminLineStatusStyles";
 import { supabase } from "../../shared/lib/supabaseClient";
 import {
-  buildDisplayName,
   formatDate,
   invalidateAdminPipelineCaches,
   normalizeStatus,
 } from "../../shared/lib/requestData";
+import { applicantDisplayNameFromRequest, APPLICANT_SNAPSHOT_SELECT } from "../../shared/lib/applicantSnapshot";
 
 const PAGE_SIZE = 50;
 const PAGE_SIBLING_COUNT = 1;
@@ -179,7 +179,7 @@ async function fetchApplicationForActivityLog(requestId, allowedServiceIds) {
 
   let reqQuery = supabase
     .from("assistance_requests")
-    .select("id, request_code, user_id, created_at, submitted_at, status, service_id, service_name")
+    .select(`id, request_code, user_id, created_at, submitted_at, status, service_id, service_name, ${APPLICANT_SNAPSHOT_SELECT}`)
     .eq("id", requestId);
 
   if (allowedServiceIds.length > 0) {
@@ -207,16 +207,7 @@ async function fetchApplicationForActivityLog(requestId, allowedServiceIds) {
     category: requestRow.service_name || svcRow?.display_name || "Request",
   };
 
-  let applicantName = "Unknown Applicant";
-  if (requestRow.user_id) {
-    const { data: userRow } = await supabase
-      .from("users")
-      .select("first_name, middle_name, last_name, suffix")
-      .eq("id", requestRow.user_id)
-      .maybeSingle();
-
-    applicantName = buildDisplayName(userRow);
-  }
+  const applicantName = applicantDisplayNameFromRequest(requestRow);
 
   return buildApplicationRecord({
     row: requestRow,
@@ -464,23 +455,23 @@ export default function ActivityLogs() {
             <RefreshCcw size={14} className={isLoading ? "animate-spin" : ""} />
             Reload
           </button>
-          <MiniNotifications />
+        <MiniNotifications />
         </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div className="flex flex-col gap-4 mb-6">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <h1
+        <h1
               className="text-2xl"
-              style={{
-                fontFamily: "'Instrument Sans', sans-serif",
-                fontWeight: 500,
-                color: theme?.primary || "#1F2937",
-              }}
-            >
-              Activity Logs
-            </h1>
+          style={{
+            fontFamily: "'Instrument Sans', sans-serif",
+            fontWeight: 500,
+            color: theme?.primary || "#1F2937",
+          }}
+        >
+          Activity Logs
+        </h1>
             <p className="text-xs text-gray-500">
               {isLoading
                 ? "Loading request movements..."
@@ -676,7 +667,7 @@ export default function ActivityLogs() {
                       </p>
                       <span className="text-sm text-gray-600 font-medium truncate block">
                         {log.action_label}
-                      </span>
+                    </span>
                     </div>
                     <button
                       type="button"
@@ -761,8 +752,8 @@ export default function ActivityLogs() {
               >
                 <ChevronRight size={16} />
               </button>
-            </div>
           </div>
+        </div>
         ) : null}
       </div>
     </div>

@@ -19,6 +19,7 @@ import {
 import { DetailActionsPanel, InterviewInstructions } from "../../components/forApprovalDetailUi";
 import { detailFont, detailPrimaryButtonCompactClass, detailDeclineButtonCompactClass } from "../../components/forApprovalDetailStyles";
 import { getAdminRequestStatusBadgeStyle } from "../../../shared/lib/adminLineStatusStyles";
+import { applicantRecordFromRequest } from "../../../shared/lib/applicantSnapshot";
 import SubmittedDocumentsThumbnails from "../../components/SubmittedDocumentsThumbnails";
 
 /**
@@ -92,11 +93,14 @@ export default function ApprovalReviewDetails({
           return;
         }
 
+        const snapshotApplicant = applicantRecordFromRequest(requestRow);
         const userId = requestRow?.user_id || application.userId;
         const [requesterResult, attachmentsResult] = await Promise.all([
-          userId
-            ? supabase.from("users").select("*").eq("id", userId).maybeSingle()
-            : Promise.resolve({ data: null, error: null }),
+          snapshotApplicant
+            ? Promise.resolve({ data: snapshotApplicant, error: null })
+            : userId
+              ? supabase.from("users").select("*").eq("id", userId).maybeSingle()
+              : Promise.resolve({ data: null, error: null }),
           fetchRequestAttachments(application.requestId),
         ]);
 
@@ -110,7 +114,7 @@ export default function ApprovalReviewDetails({
           throw attachmentsResult.error;
         }
 
-        const nextDocuments = mapAttachments(
+        const nextDocuments = await mapAttachments(
           attachmentsResult.data || [],
           application.serviceId,
           attachmentCatalog

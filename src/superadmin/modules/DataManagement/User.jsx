@@ -35,6 +35,12 @@ import {
   REGISTERED_VOTER_ID_PATTERN,
   validateUserProfileVoterId,
 } from "../../../shared/lib/registeredVoterValidation";
+import {
+  formatPhMobileGroups,
+  localMobileDigits,
+  normalizePhMobile,
+  phoneValidationMessage,
+} from "../../../shared/lib/phMobile";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 350;
@@ -68,7 +74,7 @@ function emptyProfileForm(user) {
     sex: displayText(user?.sex, ""),
     birthDate: displayText(user?.birthDate, "").slice(0, 10),
     email: displayText(user?.email, ""),
-    contactNo: displayText(user?.contactNo, ""),
+    contactNo: localMobileDigits(user?.contactNo),
     address: displayText(user?.address, ""),
     barangay: displayText(user?.barangay, ""),
     voterId: formatRegisteredVoterId(displayText(user?.voterId, "")),
@@ -577,6 +583,7 @@ function UserDetailView({ userId }) {
   const [actionError, setActionError] = useState("");
   const [profileError, setProfileError] = useState("");
   const [vinTouched, setVinTouched] = useState(false);
+  const [contactTouched, setContactTouched] = useState(false);
   const [vinLookup, setVinLookup] = useState({ status: "idle", name: "" });
   const [viewingRequest, setViewingRequest] = useState(null);
 
@@ -629,6 +636,7 @@ function UserDetailView({ userId }) {
   const originalVin = formatRegisteredVoterId(displayText(user?.voterId, ""));
   const vinError = validateUserProfileVoterId(profileForm.voterId, originalVin);
   const vinChanged = formatRegisteredVoterId(profileForm.voterId) !== originalVin;
+  const contactError = phoneValidationMessage(profileForm.contactNo);
 
   useEffect(() => {
     if (!editOpen) {
@@ -712,9 +720,15 @@ function UserDetailView({ userId }) {
   const handleSaveProfile = async () => {
     if (!user?.id || saveBusy) return;
     setVinTouched(true);
+    setContactTouched(true);
     const nextVinError = validateUserProfileVoterId(profileForm.voterId, originalVin);
     if (nextVinError) {
       setProfileError(nextVinError);
+      return;
+    }
+    const nextContactError = phoneValidationMessage(profileForm.contactNo);
+    if (nextContactError) {
+      setProfileError(nextContactError);
       return;
     }
     setSaveBusy(true);
@@ -730,7 +744,7 @@ function UserDetailView({ userId }) {
         sex: displayText(profileForm.sex, ""),
         birthDate: displayText(profileForm.birthDate, "").slice(0, 10),
         email: displayText(profileForm.email, ""),
-        contactNo: displayText(profileForm.contactNo, ""),
+        contactNo: normalizePhMobile(profileForm.contactNo),
         address: displayText(profileForm.address, ""),
         barangay: displayText(profileForm.barangay, ""),
         voterId: formatRegisteredVoterId(displayText(profileForm.voterId, "")),
@@ -866,6 +880,7 @@ function UserDetailView({ userId }) {
                 setProfileForm(emptyProfileForm(user));
                 setProfileError("");
                 setVinTouched(false);
+                setContactTouched(false);
                 setVinLookup({ status: "idle", name: "" });
                 setEditOpen(true);
               }}
@@ -1082,7 +1097,6 @@ function UserDetailView({ userId }) {
                   ["lastName", "Last name"],
                   ["suffix", "Suffix"],
                   ["email", "Email"],
-                  ["contactNo", "Contact"],
                 ].map(([key, label]) => (
                   <label key={key} className="text-[11px] font-semibold text-ocean-700">
                     {label}
@@ -1100,6 +1114,45 @@ function UserDetailView({ userId }) {
                     />
                   </label>
                 ))}
+                <label className="text-[11px] font-semibold text-ocean-700">
+                  Contact
+                  <span
+                    className={`mt-1 flex h-9 overflow-hidden rounded-lg border bg-white ${
+                      contactTouched && contactError ? "border-rose-300" : "border-ocean-200"
+                    }`}
+                  >
+                    <span className="inline-flex shrink-0 items-center border-r border-ocean-200 bg-ocean-50 px-2.5 font-semibold text-ocean-800">
+                      +63
+                    </span>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      value={formatPhMobileGroups(profileForm.contactNo)}
+                      onChange={(event) => {
+                        setProfileForm((previous) => ({
+                          ...previous,
+                          contactNo: localMobileDigits(event.target.value),
+                        }));
+                        setProfileError("");
+                      }}
+                      onBlur={() => setContactTouched(true)}
+                      maxLength={12}
+                      placeholder="9XX XXX XXXX"
+                      aria-invalid={contactTouched && !!contactError}
+                      className="h-full min-w-0 flex-1 px-2 font-mono text-xs font-medium text-ocean-900 outline-none"
+                    />
+                  </span>
+                  <span
+                    className={`mt-1 block text-[11px] font-medium ${
+                      contactTouched && contactError ? "text-rose-600" : "text-ocean-700"
+                    }`}
+                  >
+                    {contactTouched && contactError
+                      ? contactError
+                      : "PH mobile: 10 digits starting with 9. Saved as +63 9XX XXX XXXX."}
+                  </span>
+                </label>
                 <label className="text-[11px] font-semibold text-ocean-700 sm:col-span-2">
                   VIN
                   <input
@@ -1226,6 +1279,7 @@ function UserDetailView({ userId }) {
                     setEditOpen(false);
                     setProfileError("");
                     setVinTouched(false);
+                    setContactTouched(false);
                   }}
                   disabled={saveBusy}
                   className="h-9 rounded-lg border border-ocean-200 px-3 text-xs font-semibold text-ocean-700"

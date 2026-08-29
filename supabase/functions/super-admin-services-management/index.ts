@@ -1,5 +1,6 @@
 import { authorizeRequest, getServiceClient } from "../_shared/client.ts";
 import { jsonResponse, preflight } from "../_shared/cors.ts";
+import { AUDIT_MODULES, createAuditor } from "../_shared/auditTrail.ts";
 
 /**
  * POST /functions/v1/super-admin-services-management
@@ -547,6 +548,8 @@ Deno.serve(async (req) => {
       return superAdminCheck.response;
     }
 
+    const auditor = createAuditor(supabase, req, auth.userId);
+
     let body: Record<string, unknown>;
     try {
       body = (await req.json()) as Record<string, unknown>;
@@ -594,6 +597,13 @@ Deno.serve(async (req) => {
         .select("slug")
         .single();
       if (error) throw error;
+      await auditor.record({
+        action: "create",
+        module: AUDIT_MODULES.CONTENT_SERVICES,
+        resourceType: "category",
+        resourceId: inserted?.slug || slug,
+        summary: `Created assistance ${assistanceName}`,
+      });
       return jsonResponse({
         success: true,
         action,
@@ -636,6 +646,13 @@ Deno.serve(async (req) => {
 
     if (action === "category.archive") {
       const result = await archiveCategory(supabase, String(body.categoryId ?? body.id ?? ""));
+      await auditor.record({
+        action: "archive",
+        module: AUDIT_MODULES.CONTENT_SERVICES,
+        resourceType: "category",
+        resourceId: String(body.categoryId ?? body.id ?? ""),
+        summary: "Archived an assistance category",
+      });
       return jsonResponse({ success: true, action, ...result });
     }
 
@@ -680,11 +697,25 @@ Deno.serve(async (req) => {
         additionalAttachment
       );
 
+      await auditor.record({
+        action: isUpdate ? "update" : "create",
+        module: AUDIT_MODULES.CONTENT_SERVICES,
+        resourceType: "service",
+        resourceId: serviceId,
+        summary: `${isUpdate ? "Updated" : "Created"} service ${String(servicePayload.display_name || serviceId)}`,
+      });
       return jsonResponse({ success: true, action, serviceId });
     }
 
     if (action === "service.archive") {
       const result = await archiveService(supabase, String(body.serviceId ?? body.id ?? ""));
+      await auditor.record({
+        action: "archive",
+        module: AUDIT_MODULES.CONTENT_SERVICES,
+        resourceType: "service",
+        resourceId: String(body.serviceId ?? body.id ?? ""),
+        summary: "Archived a service",
+      });
       return jsonResponse({ success: true, action, ...result });
     }
 

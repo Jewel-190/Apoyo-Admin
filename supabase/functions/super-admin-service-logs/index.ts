@@ -9,7 +9,9 @@ import { jsonResponse, preflight } from "../_shared/cors.ts";
  * module: every read is brokered here, behind is_superadmin(), and only the
  * whitelisted projection below is returned.
  *
- * Labels prefer immutable snapshots on assistance_requests (service_name,
+ * Applicant identity prefers immutable snapshots on assistance_requests
+ * (applicant_*). Live public.users is used only to match search by the
+ * current profile name. Labels prefer immutable snapshots (service_name,
  * assistance_name, category_id). The live catalog is a fallback for rows that
  * predate the retention migration.
  *
@@ -28,10 +30,8 @@ const MAX_NAME_CHARS = 200;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_CALLS = 120;
 
-const USER_SELECT = "id, first_name, middle_name, last_name, suffix, email, barangay";
-const USER_SELECT_MINIMAL = "id, first_name, middle_name, last_name, suffix";
 const REQUEST_SELECT =
-  "id, request_code, status, service_id, user_id, service_name, assistance_name, category_id, submitted_at, created_at, updated_at, case_study_date";
+  "id, request_code, status, service_id, user_id, service_name, assistance_name, category_id, submitted_at, created_at, updated_at, case_study_date, applicant_first_name, applicant_middle_name, applicant_last_name, applicant_suffix, applicant_email, applicant_barangay, applicant_contact_number, applicant_snapshot_at";
 const FACET_SELECT = "status, assistance_name, category_id, service_id, service_name";
 
 /** DB values accepted per status label. Anything else is rejected, not passed through. Drafts are never listed. */
@@ -166,13 +166,6 @@ function scalarString(value: unknown): string {
 
 function boundedString(value: unknown, maxChars: number) {
   return scalarString(value).slice(0, maxChars).trim();
-}
-
-function buildFullName(row: Record<string, unknown>) {
-  const parts = [row?.first_name, row?.middle_name, row?.last_name, row?.suffix]
-    .map((part) => scalarString(part))
-    .filter(Boolean);
-  return parts.join(" ") || "—";
 }
 
 function formatAssistanceName(value: unknown) {
@@ -411,49 +404,29 @@ async function resolveServiceMetaByIds(
   return metaByServiceId;
 }
 
-async function fetchUsersByIds(
-  supabase: ReturnType<typeof getServiceClient>,
-  userIds: string[]
-) {
-  const ids = [...new Set(userIds.filter(Boolean).map(String))].filter(isUuidLike);
-  const map = new Map<string, Record<string, unknown>>();
-  if (ids.length === 0) return map;
-
-  const { data, error } = await supabase.from("users").select(USER_SELECT).in("id", ids);
-  if (error) {
-    const retry = await supabase.from("users").select(USER_SELECT_MINIMAL).in("id", ids);
-    if (retry.error) throw retry.error;
-    for (const row of retry.data || []) {
-      map.set(String(row.id), row as Record<string, unknown>);
-    }
-    return map;
-  }
-
-  for (const row of data || []) {
-    map.set(String(row.id), row as Record<string, unknown>);
-  }
-  return map;
-}
-
-function mapApplicant(row: Record<string, unknown> | undefined, userId: string | null) {
-  if (!row) {
-    return { userId, applicantName: "—", applicantEmail: "", applicantBarangay: "" };
-  }
+function mapApplicantFromRequest(row: Record<string, unknown>) {
+  const userId = row.user_id ? String(row.user_id) : null;
+  const nameParts = [
+    row.applicant_first_name,
+    row.applicant_middle_name,
+    row.applicant_last_name,
+    row.applicant_suffix,
+  ]
+    .map((part) => scalarString(part))
+    .filter(Boolean);
   return {
-    userId: String(row.id || userId || ""),
-    applicantName: buildFullName(row),
-    applicantEmail: scalarString(row.email),
-    applicantBarangay: scalarString(row.barangay),
+    userId,
+    applicantName: nameParts.join(" ") || "—",
+    applicantEmail: scalarString(row.applicant_email),
+    applicantBarangay: scalarString(row.applicant_barangay),
   };
 }
 
 function mapRequestRow(
   row: Record<string, unknown>,
-  metaByServiceId: Record<string, ServiceMeta>,
-  userMap: Map<string, Record<string, unknown>>
+  metaByServiceId: Record<string, ServiceMeta>
 ) {
   const serviceId = row.service_id ? String(row.service_id) : null;
-  const userId = row.user_id ? String(row.user_id) : null;
   const snapshotService = scalarString(row.service_name);
   const snapshotAssistance = scalarString(row.assistance_name);
   const meta = (serviceId && metaByServiceId[serviceId]) || {
@@ -477,7 +450,7 @@ function mapRequestRow(
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
     caseStudyDate: row.case_study_date || null,
-    ...mapApplicant(userId ? userMap.get(userId) : undefined, userId),
+    ...mapApplicantFromRequest(row),
   };
 }
 
@@ -575,13 +548,21 @@ function applyRequestFilters(
     if (!selection.searchToken && selection.userIds.length === 0) {
       return { empty: true as const, query: next };
     }
-    if (selection.searchToken && selection.userIds.length > 0) {
+    if (selection.searchToken) {
       const codePattern = quoteFilterValue(`%${selection.searchToken}%`);
-      next = next.or(
-        `request_code.ilike.${codePattern},user_id.in.(${selection.userIds.join(",")})`
-      );
-    } else if (selection.searchToken) {
-      next = next.ilike("request_code", `%${selection.searchToken}%`);
+      const searchParts = [
+        `request_code.ilike.${codePattern}`,
+        `applicant_first_name.ilike.${codePattern}`,
+        `applicant_middle_name.ilike.${codePattern}`,
+        `applicant_last_name.ilike.${codePattern}`,
+        `applicant_suffix.ilike.${codePattern}`,
+        `applicant_email.ilike.${codePattern}`,
+        `applicant_contact_number.ilike.${codePattern}`,
+      ];
+      if (selection.userIds.length > 0) {
+        searchParts.push(`user_id.in.(${selection.userIds.join(",")})`);
+      }
+      next = next.or(searchParts.join(","));
     } else {
       next = next.in("user_id", selection.userIds);
     }
@@ -793,16 +774,13 @@ async function listServiceLogs(
   if (listResult.error) throw listResult.error;
 
   const rows = (listResult.data || []) as Record<string, unknown>[];
-  const [userMap, metaByServiceId] = await Promise.all([
-    fetchUsersByIds(
-      supabase,
-      rows.map((row) => String(row.user_id || ""))
-    ),
-    resolveServiceMetaByIds(supabase, serviceIdsNeedingCatalogFallback(rows)),
-  ]);
+  const metaByServiceId = await resolveServiceMetaByIds(
+    supabase,
+    serviceIdsNeedingCatalogFallback(rows)
+  );
 
   return {
-    logs: rows.map((row) => mapRequestRow(row, metaByServiceId, userMap)),
+    logs: rows.map((row) => mapRequestRow(row, metaByServiceId)),
     total: Number(listResult.count || 0),
     page,
     pageSize,
@@ -833,29 +811,21 @@ async function getServiceLog(
   if (String(row.status ?? "").trim().toLowerCase() === "draft") {
     throw new ApiError("Service log not found.", 404);
   }
-  const [userMap, metaByServiceId] = await Promise.all([
-    fetchUsersByIds(supabase, [String(row.user_id || "")]),
-    resolveServiceMetaByIds(supabase, serviceIdsNeedingCatalogFallback([row])),
-  ]);
+  const metaByServiceId = await resolveServiceMetaByIds(
+    supabase,
+    serviceIdsNeedingCatalogFallback([row])
+  );
 
-  const log = mapRequestRow(row, metaByServiceId, userMap);
-  const profile = row.user_id ? userMap.get(String(row.user_id)) : undefined;
+  const log = mapRequestRow(row, metaByServiceId);
 
   return {
     log,
-    user: profile
-      ? {
-          id: String(profile.id),
-          fullName: buildFullName(profile),
-          email: scalarString(profile.email),
-          barangay: scalarString(profile.barangay),
-        }
-      : {
-          id: log.userId,
-          fullName: log.applicantName,
-          email: log.applicantEmail,
-          barangay: log.applicantBarangay,
-        },
+    user: {
+      id: log.userId,
+      fullName: log.applicantName,
+      email: log.applicantEmail,
+      barangay: log.applicantBarangay,
+    },
   };
 }
 

@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "../shared/components/ProtectedRoute";
 import SuperadminLayout from "./SuperadminLayout.jsx";
-import { NotificationsPage } from "./modules/notifications/NotificationsPage.jsx";
+import { NotificationsPage } from "./modules/Notifications/NotificationsPage.jsx";
 import { Reports } from "./modules/Reports.jsx";
 import { AuditTrail } from "./modules/AuditTrail.jsx";
 import { Voters } from "./modules/DataManagement/Voters.jsx";
@@ -27,6 +27,7 @@ export default function SuperadminRoutes() {
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="notifications/:notificationId" element={<NotificationsPage />} />
         <Route path="reports" element={<Reports />} />
         <Route path="content-management" element={<Navigate to="/superadmin/content-management/services" replace />} />
         <Route path="content-management/services" element={<Services />} />

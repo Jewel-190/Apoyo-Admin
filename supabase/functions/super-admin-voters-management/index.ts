@@ -1,5 +1,6 @@
 import { authorizeRequest, getServiceClient } from "../_shared/client.ts";
 import { jsonResponse, preflight } from "../_shared/cors.ts";
+import { AUDIT_MODULES, createAuditor, formatPersonAuditLabel } from "../_shared/auditTrail.ts";
 
 /**
  * POST /functions/v1/super-admin-voters-management
@@ -164,6 +165,14 @@ function buildRegisteredVoterFullName(row: Record<string, unknown>) {
   return parts.join(" ") || "—";
 }
 
+function voterAuditLabel(row: Record<string, unknown> | null | undefined) {
+  if (!row) return "";
+  return formatPersonAuditLabel(
+    row,
+    String(row.voterIdNumber ?? row.voter_id ?? "")
+  );
+}
+
 function mapRegisteredVoterRow(row: Record<string, unknown> | null) {
   if (!row) return null;
   const sex = row.sex;
@@ -325,6 +334,8 @@ Deno.serve(async (req) => {
       return superAdminCheck.response;
     }
 
+    const auditor = createAuditor(supabase, req, auth.userId);
+
     let body: Payload;
     try {
       body = (await req.json()) as Payload;
@@ -384,10 +395,18 @@ Deno.serve(async (req) => {
           .select("id, name, is_active, registered_voters(count)")
           .single();
         if (error) throw error;
+        const barangay = mapBarangayRow(data as Record<string, unknown>);
+        await auditor.record({
+          action: "create",
+          module: AUDIT_MODULES.DATA_BARANGAYS,
+          resourceType: "barangay",
+          resourceId: String(barangay?.id || existing?.id || ""),
+          summary: `Created barangay ${name}`,
+        });
         return jsonResponse({
           success: true,
           action,
-          barangay: mapBarangayRow(data as Record<string, unknown>),
+          barangay,
         });
       } catch (err) {
         const message = isUniqueViolation(err)
@@ -459,6 +478,13 @@ Deno.serve(async (req) => {
 
         const { error } = await supabase.from("barangays").delete().eq("id", barangayId);
         if (error) throw error;
+        await auditor.record({
+          action: "delete",
+          module: AUDIT_MODULES.DATA_BARANGAYS,
+          resourceType: "barangay",
+          resourceId: String(existing.id),
+          summary: `Deleted barangay ${catalogName}`,
+        });
         return jsonResponse({
           success: true,
           action,
@@ -514,6 +540,19 @@ Deno.serve(async (req) => {
     if (action === "createRegisteredVoter") {
       try {
         const voter = await createOne(supabase, body.voter ?? {});
+        const voterRow = (voter || {}) as Record<string, unknown>;
+        const voterLabel = voterAuditLabel(voterRow) || "unknown voter";
+        await auditor.record({
+          action: "create",
+          module: AUDIT_MODULES.DATA_VOTERS,
+          resourceType: "registered_voter",
+          resourceId: String(voter?.id ?? ""),
+          summary: `Created registered voter ${voterLabel}`,
+          metadata: {
+            voterIdNumber: voterRow.voterIdNumber ?? null,
+            barangay: voterRow.barangay ?? null,
+          },
+        });
         return jsonResponse({ success: true, action, voter });
       } catch (err) {
         const message = isUniqueViolation(err)
@@ -528,6 +567,19 @@ Deno.serve(async (req) => {
     if (action === "updateRegisteredVoter") {
       try {
         const voter = await updateOne(supabase, String(body.id ?? ""), body.voter ?? {});
+        const voterRow = (voter || {}) as Record<string, unknown>;
+        const voterLabel = voterAuditLabel(voterRow) || "unknown voter";
+        await auditor.record({
+          action: "update",
+          module: AUDIT_MODULES.DATA_VOTERS,
+          resourceType: "registered_voter",
+          resourceId: String(voter?.id ?? body.id ?? ""),
+          summary: `Updated registered voter ${voterLabel}`,
+          metadata: {
+            voterIdNumber: voterRow.voterIdNumber ?? null,
+            barangay: voterRow.barangay ?? null,
+          },
+        });
         return jsonResponse({ success: true, action, voter });
       } catch (err) {
         const message = isUniqueViolation(err)
@@ -547,10 +599,23 @@ Deno.serve(async (req) => {
           .from("registered_voters")
           .delete()
           .eq("id", voterId)
-          .select("id")
+          .select("id, first_name, middle_name, last_name, suffix, voter_id, barangay_name")
           .maybeSingle();
         if (error) throw error;
         if (!data) throw new Error("Voter record not found.");
+        const deleted = data as Record<string, unknown>;
+        const voterLabel = voterAuditLabel(deleted) || String(data.id);
+        await auditor.record({
+          action: "delete",
+          module: AUDIT_MODULES.DATA_VOTERS,
+          resourceType: "registered_voter",
+          resourceId: String(data.id),
+          summary: `Deleted registered voter ${voterLabel}`,
+          metadata: {
+            voterIdNumber: deleted.voter_id ?? null,
+            barangay: deleted.barangay_name ?? null,
+          },
+        });
         return jsonResponse({ success: true, action, id: data.id });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -576,6 +641,27 @@ Deno.serve(async (req) => {
             failed.push({ voterId, message: msg });
           }
         }
+      }
+
+      const labels = inserted
+        .map((row) => voterAuditLabel((row || {}) as Record<string, unknown>))
+        .filter(Boolean);
+      if (inserted.length > 0) {
+        await auditor.record({
+          action: "create",
+          module: AUDIT_MODULES.DATA_VOTERS,
+          resourceType: "registered_voter",
+          summary:
+            inserted.length === 1
+              ? `Created registered voter ${labels[0] || "unknown voter"}`
+              : `Created ${inserted.length} registered voters`,
+          metadata: {
+            count: inserted.length,
+            names: labels.slice(0, 50),
+            skippedDuplicate: skippedDuplicate.length,
+            failed: failed.length,
+          },
+        });
       }
 
       return jsonResponse({

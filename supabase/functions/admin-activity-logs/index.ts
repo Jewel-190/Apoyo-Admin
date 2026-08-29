@@ -1,5 +1,6 @@
 import { authorizeRequest, getServiceClient, ServiceClient } from "../_shared/client.ts";
 import { corsHeaders, jsonResponse, preflight } from "../_shared/cors.ts";
+import { applicantDisplayNameFromRequest, APPLICANT_SNAPSHOT_SELECT } from "../_shared/applicantSnapshot.ts";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -52,14 +53,10 @@ interface AssistanceRequestRow {
   user_id: string | null;
   service_id: string;
   service_name?: string | null;
-}
-
-interface UserNameRow {
-  id: string;
-  first_name: string | null;
-  middle_name: string | null;
-  last_name: string | null;
-  suffix: string | null;
+  applicant_first_name?: string | null;
+  applicant_middle_name?: string | null;
+  applicant_last_name?: string | null;
+  applicant_suffix?: string | null;
 }
 
 interface ActivityLogEntry {
@@ -327,23 +324,6 @@ function formatActivityLabel(
   return normalizeStatusLabel(action) || "Updated";
 }
 
-function buildApplicantName(user: UserNameRow | null | undefined): string {
-  if (!user) {
-    return "Unknown Applicant";
-  }
-
-  const parts = [
-    user.first_name,
-    user.middle_name,
-    user.last_name,
-    user.suffix,
-  ]
-    .map((part) => String(part ?? "").trim())
-    .filter(Boolean);
-
-  return parts.length > 0 ? parts.join(" ") : "Unknown Applicant";
-}
-
 async function fetchCatalog(supabase: ServiceClient): Promise<CatalogRow> {
   const { data: services, error } = await supabase
     .from("assistance_services")
@@ -522,7 +502,7 @@ async function fetchRequestsByIds(
     const chunk = requestIds.slice(index, index + chunkSize);
     const { data, error } = await supabase
       .from("assistance_requests")
-      .select("id, request_code, user_id, service_id, service_name")
+      .select(`id, request_code, user_id, service_id, service_name, ${APPLICANT_SNAPSHOT_SELECT}`)
       .in("id", chunk);
 
     if (error) {
@@ -530,35 +510,6 @@ async function fetchRequestsByIds(
     }
 
     for (const row of (data || []) as AssistanceRequestRow[]) {
-      map.set(row.id, row);
-    }
-  }
-
-  return map;
-}
-
-async function fetchUsersByIds(
-  supabase: ServiceClient,
-  userIds: string[]
-): Promise<Map<string, UserNameRow>> {
-  const map = new Map<string, UserNameRow>();
-  if (!userIds.length) {
-    return map;
-  }
-
-  const chunkSize = 500;
-  for (let index = 0; index < userIds.length; index += chunkSize) {
-    const chunk = userIds.slice(index, index + chunkSize);
-    const { data, error } = await supabase
-      .from("users")
-      .select("id, first_name, middle_name, last_name, suffix")
-      .in("id", chunk);
-
-    if (error) {
-      throw error;
-    }
-
-    for (const row of (data || []) as UserNameRow[]) {
       map.set(row.id, row);
     }
   }
@@ -653,15 +604,6 @@ async function buildActivityLogsPayload(
   ];
   const requestsById = await fetchRequestsByIds(supabase, pageRequestIds);
 
-  const applicantIds = [
-    ...new Set(
-      [...requestsById.values()]
-        .map((request) => request.user_id)
-        .filter(Boolean) as string[]
-    ),
-  ];
-  const usersById = await fetchUsersByIds(supabase, applicantIds);
-
   const serviceIds = [
     ...new Set(
       [...requestsById.values()]
@@ -678,7 +620,6 @@ async function buildActivityLogsPayload(
 
   const logs: ActivityLogEntry[] = auditRows.map((row) => {
     const request = requestsById.get(row.request_id);
-    const applicant = request?.user_id ? usersById.get(request.user_id) : null;
     const changedBy = row.changed_by ? String(row.changed_by) : null;
 
     return {
@@ -690,7 +631,7 @@ async function buildActivityLogsPayload(
       new_status: row.new_status,
       request_id: row.request_id,
       request_code: request?.request_code ?? null,
-      applicant_name: buildApplicantName(applicant),
+      applicant_name: applicantDisplayNameFromRequest(request as Record<string, unknown> | undefined),
       service_category: request
         ? String(request.service_name || "").trim() ||
           (request.service_id

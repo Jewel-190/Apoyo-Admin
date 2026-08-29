@@ -1,7 +1,8 @@
 import { supabase } from "./supabaseClient";
 import { FAVICON_URL } from "./staticAssets";
-import { buildDisplayName, buildNotificationDescription, formatRelativeWithTime, normalizeStatus } from "./requestData";
+import { buildNotificationDescription, formatRelativeWithTime, normalizeStatus } from "./requestData";
 import { formatAssistanceLineTitle } from "./assistanceCategoryDisplay";
+import { applicantDisplayNameFromRequest, APPLICANT_SNAPSHOT_SELECT } from "./applicantSnapshot";
 
 /** Janitor throttle — live delivery is trigger + Realtime, not this path. */
 const CLEANUP_MIN_INTERVAL_MS = 5 * 60_000;
@@ -319,7 +320,7 @@ async function enrichAdminNotificationRows(list) {
 
   const { data: requests, error: reqErr } = await supabase
     .from("assistance_requests")
-    .select("id, service_id, status, request_code, user_id, service_name, assistance_name, category_slug, category_id")
+    .select(`id, service_id, status, request_code, user_id, service_name, assistance_name, category_slug, category_id, ${APPLICANT_SNAPSHOT_SELECT}`)
     .in("id", requestIds);
 
   if (reqErr) {
@@ -327,22 +328,6 @@ async function enrichAdminNotificationRows(list) {
   }
 
   const requestById = Object.fromEntries((requests || []).map((r) => [r.id, r]));
-
-  const userIds = [...new Set((requests || []).map((r) => r.user_id).filter(Boolean))];
-  let usersById = {};
-
-  if (userIds.length > 0) {
-    const { data: userRows, error: userErr } = await supabase
-      .from("users")
-      .select("id, first_name, middle_name, last_name, suffix")
-      .in("id", userIds);
-
-    if (userErr) {
-      throw userErr;
-    }
-
-    usersById = Object.fromEntries((userRows || []).map((u) => [u.id, u]));
-  }
 
   const serviceIds = [...new Set((requests || []).map((r) => r.service_id).filter(Boolean))];
   let servicesById = {};
@@ -392,7 +377,6 @@ async function enrichAdminNotificationRows(list) {
       : svc?.category_id
         ? categoriesById[svc.category_id]
         : null;
-    const applicant = req.user_id ? usersById[req.user_id] : null;
     const snapshotAssistance = String(req.assistance_name || "").trim();
     const snapshotService = String(req.service_name || "").trim();
     const assistanceCategoryName = snapshotAssistance
@@ -414,7 +398,7 @@ async function enrichAdminNotificationRows(list) {
       service_id: req.service_id ?? null,
       assistanceCategorySlug: req.category_slug || cat?.slug || null,
       assistanceCategoryName,
-      applicantName: buildDisplayName(applicant, "Applicant"),
+      applicantName: applicantDisplayNameFromRequest(req, "Applicant"),
       requestCode: req.request_code ?? null,
       requestStatus: req.status ?? null,
       action: al.action ?? null,

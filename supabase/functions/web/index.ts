@@ -1,5 +1,6 @@
 import { authorizeRequest, getServiceClient } from "../_shared/client.ts";
 import { jsonResponse, preflight } from "../_shared/cors.ts";
+import { AUDIT_MODULES, createAuditor } from "../_shared/auditTrail.ts";
 import {
   EMPTY_LEGAL,
   WEB_PAGES,
@@ -160,6 +161,8 @@ Deno.serve(async (req) => {
     const superAdminCheck = await ensureSuperAdminCaller(supabase, auth.userId);
     if (!superAdminCheck.ok) return superAdminCheck.response;
 
+    const auditor = createAuditor(supabase, req, auth.userId);
+
     if (action === "cms.list") {
       const { pages, updatedAt } = await loadCanonicalPages(supabase);
       return jsonResponse({
@@ -194,6 +197,14 @@ Deno.serve(async (req) => {
       { onConflict: "page" }
     );
     if (error) throw error;
+
+    await auditor.record({
+      action: "update",
+      module: AUDIT_MODULES.CONTENT_WEB,
+      resourceType: "web_page",
+      resourceId: page,
+      summary: `Published web page ${page}`,
+    });
 
     return jsonResponse({
       success: true,

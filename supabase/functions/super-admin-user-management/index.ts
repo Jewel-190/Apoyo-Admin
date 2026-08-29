@@ -1,5 +1,7 @@
 import { authorizeRequest, getServiceClient } from "../_shared/client.ts";
 import { jsonResponse, preflight } from "../_shared/cors.ts";
+import { AUDIT_MODULES, createAuditor, formatPersonAuditLabel } from "../_shared/auditTrail.ts";
+import { normalizePhMobile, phoneValidationMessage } from "../_shared/phMobile.ts";
 
 /**
  * POST /functions/v1/super-admin-user-management
@@ -912,6 +914,13 @@ function buildUpdatePayload(profile: Record<string, unknown> | undefined) {
     if (!Object.prototype.hasOwnProperty.call(input, camel)) continue;
     if (!USER_UPDATE_ALLOWLIST.has(column)) continue;
     const value = input[camel];
+    if (column === "contact_number") {
+      const text = value == null ? "" : scalarString(value);
+      const contactError = phoneValidationMessage(text);
+      if (contactError) throw new Error(contactError);
+      payload[column] = normalizePhMobile(text);
+      continue;
+    }
     if (value == null || value === "") {
       // NOT NULL text columns need "" not null; optional blanks stay empty string too.
       payload[column] = emptyStringColumns.has(column) ? "" : null;
@@ -1062,6 +1071,8 @@ Deno.serve(async (req) => {
       return superAdminCheck.response;
     }
 
+    const auditor = createAuditor(supabase, req, auth.userId);
+
     let body: Payload;
     try {
       body = (await req.json()) as Payload;
@@ -1086,6 +1097,13 @@ Deno.serve(async (req) => {
         supabase,
         (result.users || []).map((user) => String(user.id))
       );
+      await auditor.record({
+        action: "export",
+        module: AUDIT_MODULES.DATA_USERS,
+        resourceType: "user",
+        summary: `Exported ${Number(result.total || result.users?.length || 0)} applicant records`,
+        metadata: { count: result.total ?? result.users?.length ?? 0 },
+      });
       return jsonResponse({
         success: true,
         action,
@@ -1113,6 +1131,21 @@ Deno.serve(async (req) => {
 
       try {
         const user = await updateUserProfileRow(supabase, userId, body.profile);
+        const userRow = user as Record<string, unknown>;
+        const userLabel =
+          formatPersonAuditLabel(userRow, String(userRow.email ?? userRow.voterId ?? "")) ||
+          userId;
+        await auditor.record({
+          action: "update",
+          module: AUDIT_MODULES.DATA_USERS,
+          resourceType: "user",
+          resourceId: userId,
+          summary: `Updated applicant ${userLabel}`,
+          metadata: {
+            email: userRow.email ?? null,
+            voterId: userRow.voterId ?? null,
+          },
+        });
         return jsonResponse({ success: true, action, user });
       } catch (err) {
         const message = errorMessage(err) || "Failed to update profile.";
@@ -1153,6 +1186,38 @@ Deno.serve(async (req) => {
       }
 
       const authUser = updated?.user || existing.user;
+      let profile: Record<string, unknown> | null = null;
+      const named = await supabase
+        .from("users")
+        .select("first_name, middle_name, last_name, suffix, voter_id_number")
+        .eq("id", userId)
+        .maybeSingle();
+      if (!named.error && named.data) {
+        profile = named.data as Record<string, unknown>;
+      } else {
+        const retry = await supabase
+          .from("users")
+          .select("first_name, middle_name, last_name, suffix")
+          .eq("id", userId)
+          .maybeSingle();
+        profile = (retry.data as Record<string, unknown>) || null;
+      }
+      const userLabel =
+        formatPersonAuditLabel(profile, String(authUser.email ?? "")) ||
+        String(authUser.email ?? userId);
+      await auditor.record({
+        action: disabled ? "disable" : "enable",
+        module: AUDIT_MODULES.DATA_USERS,
+        resourceType: "user",
+        resourceId: userId,
+        summary: disabled
+          ? `Disabled applicant ${userLabel}`
+          : `Enabled applicant ${userLabel}`,
+        metadata: {
+          email: authUser.email ?? null,
+          voterId: profile?.voter_id_number ?? profile?.voterId ?? null,
+        },
+      });
       return jsonResponse({
         success: true,
         action,

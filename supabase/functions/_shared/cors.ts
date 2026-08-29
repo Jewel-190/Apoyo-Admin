@@ -4,7 +4,7 @@
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-request-code-secret, x-cleanup-secret",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
@@ -29,4 +29,9 @@ export function preflight(req: Request): Response | null {
     return new Response("ok", { headers: corsHeaders });
   }
   return null;
+}
+
+/** Alias used by mobile-origin functions copied into this stack. */
+export function corsPreflight(): Response {
+  return new Response("ok", { headers: corsHeaders });
 }

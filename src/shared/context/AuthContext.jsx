@@ -20,6 +20,7 @@ import {
 } from "../data/adminCatalog";
 import { collectAllowedServiceIds } from "../lib/lineServiceScope";
 import { clearSessionQueryCache } from "../lib/querySessionCache";
+import { recordSuperadminSessionEvent } from "../lib/superAdminAuditTrailApi";
 
 const AuthContext = createContext(null);
 
@@ -65,7 +66,7 @@ function clearLastProtectedRoute() {
 
 function logSession(session) {
   if (import.meta.env.DEV) {
-    console.log("Session:", session);
+    console.log("Session user:", session?.user?.id ?? "none");
   }
 }
 
@@ -277,6 +278,10 @@ export function AuthProvider({ children }) {
     const currentUserId = user?.id;
     const currentSessionId = tabSessionIdRef.current;
 
+    if (adminProfile?.is_super_admin === true) {
+      await recordSuperadminSessionEvent("logout");
+    }
+
     if (currentUserId) {
       const { error: releaseError } = await releaseServerActiveSession({
         userId: currentUserId,
@@ -296,7 +301,7 @@ export function AuthProvider({ children }) {
     clearAuthState();
     clearLastProtectedRoute();
     setLoading(false);
-  }, [clearAuthState, user?.id]);
+  }, [adminProfile?.is_super_admin, clearAuthState, user?.id]);
 
   const signIn = useCallback(
     async ({ email, password, rememberMe = false }) => {
@@ -363,6 +368,10 @@ export function AuthProvider({ children }) {
         }
 
         clearLastProtectedRoute();
+
+        if (result.profile?.is_super_admin === true) {
+          void recordSuperadminSessionEvent("login");
+        }
 
         return {
           data: {

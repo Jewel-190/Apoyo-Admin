@@ -1,5 +1,6 @@
 import { authorizeRequest, getServiceClient, ServiceClient } from "../_shared/client.ts";
 import { jsonResponse, preflight } from "../_shared/cors.ts";
+import { applicantDisplayNameFromRequest, APPLICANT_SNAPSHOT_SELECT } from "../_shared/applicantSnapshot.ts";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
 /**
@@ -78,6 +79,10 @@ interface RequestRow {
   created_at: string | null;
   updated_at: string | null;
   case_study_date: string | null;
+  applicant_first_name?: string | null;
+  applicant_middle_name?: string | null;
+  applicant_last_name?: string | null;
+  applicant_suffix?: string | null;
 }
 
 interface AppRecord {
@@ -136,14 +141,6 @@ function normalizeStatus(status: unknown): string {
     return "Declined";
   }
   return STATUS_LABELS[key] || "Pending";
-}
-
-function buildDisplayName(user: Record<string, unknown> | null | undefined): string {
-  if (!user) return "Unknown Applicant";
-  const parts = [user.first_name, user.middle_name, user.last_name, user.suffix]
-    .map((value) => String(value ?? "").trim())
-    .filter(Boolean);
-  return parts.length > 0 ? parts.join(" ") : "Unknown Applicant";
 }
 
 function toValidDate(value: unknown): Date | null {
@@ -298,7 +295,8 @@ async function fetchScopedRequests(
     const { data, error } = await supabase
       .from("assistance_requests")
       .select(
-        "id, request_code, user_id, service_id, service_name, assistance_name, status, submitted_at, created_at, updated_at, case_study_date"
+        "id, request_code, user_id, service_id, service_name, assistance_name, status, submitted_at, created_at, updated_at, case_study_date, " +
+          APPLICANT_SNAPSHOT_SELECT
       )
       .in("service_id", serviceIds)
       .neq("status", "draft")
@@ -317,43 +315,15 @@ async function fetchScopedRequests(
   return rows;
 }
 
-async function fetchUserNames(
-  supabase: ServiceClient,
-  userIds: string[]
-): Promise<Record<string, string>> {
-  const ids = [...new Set(userIds.filter(Boolean))];
-  if (!ids.length) return {};
-
-  const map: Record<string, string> = {};
-  const pageSize = 1000;
-
-  for (let i = 0; i < ids.length; i += pageSize) {
-    const slice = ids.slice(i, i + pageSize);
-    const { data, error } = await supabase
-      .from("users")
-      .select("id, first_name, middle_name, last_name, suffix")
-      .in("id", slice);
-
-    if (error) throw error;
-
-    for (const user of data || []) {
-      map[String(user.id)] = buildDisplayName(user as Record<string, unknown>);
-    }
-  }
-
-  return map;
-}
-
 function buildAppRecords(
   rows: RequestRow[],
-  serviceLabelById: Record<string, string>,
-  namesById: Record<string, string>
+  serviceLabelById: Record<string, string>
 ): AppRecord[] {
   return rows.map((row) => {
     const serviceId = String(row.service_id ?? "").trim();
     return {
       id: row.request_code || row.id,
-      name: namesById[String(row.user_id ?? "")] || "Unknown Applicant",
+      name: applicantDisplayNameFromRequest(row as Record<string, unknown>),
       category:
         String(row.service_name || "").trim() ||
         serviceLabelById[serviceId] ||
@@ -691,11 +661,7 @@ Deno.serve(async (req) => {
     }
 
     const rows = await fetchScopedRequests(supabase, effectiveServiceIds);
-    const namesById = await fetchUserNames(
-      supabase,
-      rows.map((row) => String(row.user_id ?? "")).filter(Boolean)
-    );
-    const allApps = buildAppRecords(rows, serviceLabelById, namesById);
+    const allApps = buildAppRecords(rows, serviceLabelById);
     const apps = filterByRange(allApps, startIso, endIso);
 
     const rangeLabel = formatRangeLabel(startIso, endIso);

@@ -1,5 +1,6 @@
 import { authorizeRequest, getServiceClient } from "../_shared/client.ts";
 import { jsonResponse, preflight } from "../_shared/cors.ts";
+import { AUDIT_MODULES, createAuditor } from "../_shared/auditTrail.ts";
 
 /**
  * POST /functions/v1/super-admin-settings-management
@@ -352,6 +353,8 @@ Deno.serve(async (req) => {
       return superAdminCheck.response;
     }
 
+    const auditor = createAuditor(supabase, req, auth.userId);
+
     let body: Payload;
     try {
       body = (await req.json()) as Payload;
@@ -487,6 +490,13 @@ Deno.serve(async (req) => {
           .maybeSingle();
         if (error) throw error;
 
+        await auditor.record({
+          action: "update",
+          module: AUDIT_MODULES.SETTINGS,
+          resourceType: "setting",
+          resourceId: `${scope}.${key}`,
+          summary: `Updated setting ${scope}.${key}`,
+        });
         return jsonResponse({
           success: true,
           action,
