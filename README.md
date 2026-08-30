@@ -59,53 +59,82 @@ The mobile app **never** calls the face-verifier port. It calls **edge functions
 
 ---
 
-## 3. Whole-system technology stack
+## 3. Whole-system technology stack — how and why
 
-### 3.1 Presentation
+This section is the one to study for defense: **what the tool actually does in Apoyo**, and **why it was chosen instead of a more obvious alternative**.
 
-| Layer | Technology | Why it is in the stack |
-|-------|------------|------------------------|
-| Admin / Superadmin UI | **React 19** + **Vite 7** + **React Router 7** | Fast SPA for staff workflows (tables, review, reports) |
-| Public website | **React 19** + **Vite 7** + **React Router 7** | Marketing site with CMS-driven copy, no login |
-| Citizen app | **Expo 54** + **React Native 0.81** + **expo-router** | One codebase for Android (and iOS if needed) |
-| Styling (web) | **Tailwind CSS 4** | Utility CSS shared across Admin and Web |
-| Styling (mobile) | StyleSheet + brand teal; NativeWind available | Native performance and a fixed brand (`#008E8A`) |
-| Icons | **lucide-react** (admin), **react-icons** (web), Expo vector icons (mobile) | Consistent iconography per platform |
-| Reports export | **SheetJS (`xlsx`)** | Excel/CSV downloads for admin and superadmin reports |
+### 3.1 Web UIs (Admin + public site): React, Vite, React Router, Tailwind
 
-### 3.2 Backend (this repo)
+**React 19** is a **client-side component library**, not a server. Admin is queues, filters, session heartbeats, document lightboxes, and role-gated layouts. That is an **SPA** problem: after login the shell stays mounted and only the inner view changes. A **Next.js / SSR** app would require a **Node process on the office PC** in front of every page. We already have Kong for data; we do not want a second application server just to render HTML. React compiles to static JS that **nginx** can serve.
 
-| Layer | Technology | Role |
-|-------|------------|------|
-| API gateway | **Kong** (Supabase local stack) on port **54321** | Single HTTPS door: Auth, REST, Storage, Functions |
-| Database | **PostgreSQL 17** | System of record: users, requests, catalog, RLS |
-| Auth | **GoTrue** (Supabase Auth) | Email confirmation, JWT sessions, MPIN-as-password |
-| Data API | **PostgREST** | Typed REST over tables/views/RPCs with RLS |
-| Files | **Supabase Storage** (S3-compatible locally) | Applicant documents, avatars, web CMS media |
-| Server logic | **Supabase Edge Functions** (Deno 2) | Privileged writes, CMS, face/ID bridge, notifications |
-| Realtime / Studio | Included in `supabase start` | Local ops; **not** exposed on the public tunnel |
+**Vite 7** is the **bundler and dev server**. In development it uses native ES modules + HMR so staff UI iteration is fast. In production `vite build` emits `dist/` (hashed JS/CSS). `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are **inlined at build time** — that is why they must be public values only. Vite is used instead of webpack for simpler config and faster builds; it is used instead of serving `src/` raw because production needs minification, code-split chunks (`xlsx` is lazy), and cacheable filenames.
 
-### 3.3 Identity verification (lives in Apoyo-Mobile, used by this backend)
+**React Router 7** (`BrowserRouter`) maps URLs (`/admin/scheduling`, `/superadmin/data-management/users`) to components **in the browser**. That is why nginx (and Cloudflare) must **fall back unknown paths to `index.html`**: a refresh on `/admin/reports` is not a real file on disk. We did not use hash routing (`#/admin`) because public/staff URLs should look like normal HTTPS paths.
 
-| Layer | Technology | Role |
-|-------|------------|------|
-| Face recognition | **Exadel CompreFace 1.2** | Compare selfie vs ID photo (similarity threshold ~0.85) |
-| Anti-spoof | **DeepFace** | Reject printed photos / screens |
-| Liveness | **MediaPipe Face Mesh** | Blink and pose challenges across multiple frames |
-| ID text | **EasyOCR** + **RapidFuzz** | Match ID card text to voter registry fields |
-| Verifier API | **Python FastAPI** | One internal HTTP service wrapping the models |
-| Orchestration | **Docker Compose** | Postgres + CompreFace + verifier on localhost |
+**Tailwind CSS 4** (Vite plugin) is **utility CSS generated from class names**. Staff screens are dense tables and badges; utilities avoid a large custom CSS file that drifts between Admin and Web. The Vite plugin compiles only used classes (no unused Bootstrap-sized sheet).
 
-### 3.4 Production hosting (Windows PC)
+**lucide-react** (Admin) and **react-icons** (Web) are SVG icon sets imported as components so unused icons are tree-shaken. Admin needs many status/action glyphs; Web needs a smaller marketing set.
 
-| Layer | Technology | Role |
-|-------|------------|------|
-| Containers | **Docker Desktop** (WSL2) | Supabase, nginx SPAs, face stack |
-| Static hosting | **nginx** Alpine | Serves built `dist/` for Web (`:4173`) and Admin (`:4174`) |
-| Public HTTPS | **Cloudflare named tunnel** `apoyo-dasma` | No inbound port-forward; Cloudflare terminates TLS |
-| DNS / domain | **Cloudflare DNS** + **Hostinger** registrar | `*.apoyo-dasma.online` |
-| Email | **Resend** SMTP (`smtp.resend.com:465`) | Confirmation and MPIN recovery mail from `noreply@apoyo-dasma.online` |
-| Start/stop | PowerShell in `deploy/scripts/` | `Start-Apoyo.ps1`, health, backup, restore, tunnel service |
+**SheetJS (`xlsx`)** runs in the **browser** (and from report payloads) to emit `.xlsx` / CSV. City offices open Excel, not JSON. A server-side report renderer would mean another runtime and disk path; generating the workbook from already-authorized JSON keeps export on the same permission path as the on-screen report.
+
+### 3.2 Citizen app: Expo / React Native (Apoyo-Mobile)
+
+**Expo 54 + React Native 0.81** compile JavaScript to a **native Android (and optional iOS) app** with camera, secure storage, and file pickers. A **mobile website** cannot reliably do liveness capture, SecureStore, or Play-style install. **Flutter** would be a second language beside the React web apps; Expo keeps **one UI paradigm (React)** across phone and browser.
+
+**expo-router** is file-based navigation (`app/Home/…`) so screens match URLs/deep links (`apoyo://auth-callback`) for email confirmation. **expo-camera** is used because registration needs a **live camera stream and multiple frames**, not a single gallery pick (a gallery photo is exactly the spoof we try to reject).
+
+**expo-secure-store** holds the Supabase session on device using the OS keystore/keystore-equivalent. `localStorage` on a phone WebView is trivial to scrape; AsyncStorage is unencrypted. SecureStore has a **size limit**, so the session is **chunked**. Web fallback still uses AsyncStorage because there is no SecureStore on web.
+
+### 3.3 Backend platform: local Supabase (this repo)
+
+We did **not** write a custom Express/Nest API for every table. **Supabase CLI (`npx supabase start`)** runs a **known composition** of open-source pieces as Docker containers. Migrations live in `supabase/migrations/` and are the schema source of truth.
+
+| Piece | What it does here | Why this instead of… |
+|-------|-------------------|----------------------|
+| **PostgreSQL 17** | System of record. Tables, **triggers** (applicant snapshot on submit), **RPCs** (`submit_assistance_request`, `claim_admin_session`, `is_superadmin`). | SQLite cannot do concurrent staff + mobile + RLS at this scale. A cloud DB would be a **fourth vendor** and would send voter/case PII off the office PC. |
+| **Row Level Security (RLS)** | Postgres **policies** run on **every** PostgREST query using `auth.uid()` from the JWT. Example: a line admin only sees requests in their `category_id`; anon can **read active catalog** but not `web_content` or other people’s files. | App-only checks fail if someone calls the REST URL with the anon key (which is **in the JS bundle** — that is normal). RLS is defense in depth **in the database**. |
+| **PostgREST** | Turns tables/views/RPCs into HTTP (`/rest/v1/…`) with **parameterized** filters. The JS client does not concatenate SQL. | A hand-written CRUD API would duplicate the schema and drift. PostgREST stays in sync with migrations. |
+| **GoTrue (Supabase Auth)** | Email+password (staff) and email+**6-digit MPIN** (citizens). Issues **JWTs**, refresh rotation, confirmation and recovery **emails**. | A `pins` table with reversible encryption would be worse. GoTrue **hashes** the secret. Confirmation uses real SMTP (Resend), not a fake inbox, so citizens can register on a real phone. |
+| **Kong** | One process on **host port 54321** that **routes** `/auth/v1`, `/rest/v1`, `/storage/v1`, `/functions/v1`. | The tunnel only needs **one** origin (`api.apoyo-dasma.online`). Without a gateway we would expose Postgres (54322) or many ports. |
+| **Storage** | S3-compatible object API. Buckets: private `request-documents`, `avatars`, `web-content`. | Files in Postgres BLOBs bloat backups and RLS. Private buckets + **signed URLs** mean a guessed path is not enough to download an ID photo. |
+| **Edge Functions (Deno 2)** | TypeScript on the gateway with **service_role** (bypasses RLS **on purpose** after the function has authorized the caller). Used for CMS, staff reports, notifications, **bridging to the face verifier**. | Putting `service_role` in Vite/Expo would let anyone become superadmin. SQL RPCs are used when the logic is set-based; Edge is used when we need HTTP to Python, multi-step auth, or a stable JSON contract for three clients. |
+
+**Why not hosted Supabase Cloud?** It would be another paid vendor, another region for PII, and a different JWT secret than this homelab. Local `supabase start` keeps **data + migrations in this repo** on the city’s disk.
+
+**Why `minimum_password_length = 6`?** The mobile **MPIN is the GoTrue password**. Raising the minimum to 8 would **break citizen sign-up**. Staff create/reset in superadmin still enforces **8+** in application code.
+
+**Why some functions have `verify_jwt = false`?** `web` must answer **anonymous** GET for the marketing site. `facial-verification` / `id-document-verification` run **before** the user has a session (registration). Kong will not require a user JWT, but the function **still** checks a **registration-attempt token** (or, for CMS POST, a superadmin JWT). That is “public gateway, private rules inside.”
+
+### 3.4 Face / ID stack (Apoyo-Mobile compose, called from these edge functions)
+
+The phone **must not** talk to port 8090. If it did, anyone who decompiled the APK could hammer the models. Flow:
+
+`Expo camera frames` → **HTTPS** `api…/functions/v1/facial-verification` → Deno checks registration token → HTTP to Docker alias **`face-verifier:8080`** (private network).
+
+| Technology | How it is applied | Why this tool |
+|------------|-------------------|---------------|
+| **Exadel CompreFace** | 1:1 **verification**: embedding of selfie vs embedding of ID photo; accept if similarity ≥ ~0.85. | Self-hosted, Docker-friendly, built for verification (not a paid cloud Face API that would **upload citizen faces**). |
+| **DeepFace** (`anti_spoofing=True`) | Classifies whether a frame is a **live face vs printout/screen**. | CompreFace answers “do these two faces match?”; it does not answer “is this a spoof?” We stack a second model for that. |
+| **MediaPipe Face Mesh** | Landmarks → **eye aspect ratio** (blink) and **yaw** (turn left/right). Multiple frames required. | Cheap CPU landmark model. Stops a single frozen JPEG being sent five times as “liveness.” Combined with aHash/Hamming to reject near-identical frames. |
+| **EasyOCR + RapidFuzz** | OCR on the ID image, fuzzy-match strings to `registered_voters` / registration profile (name, etc.). | PH IDs are photos, not structured barcodes we control. OCR is noisy; RapidFuzz scores **approximate** matches instead of exact string equality. |
+| **FastAPI (Python)** | `/verify`, `/verify-id`, `/health`, `/warmup`; **x-api-key**. Heavy models loaded once at warmup. | The ML ecosystem is Python. FastAPI is a thin HTTP skin so Deno does not import PyTorch. Health/warmup exist because first inference is slow; Kong would otherwise 504. |
+| **Docker Compose + extra network** | Verifier joins `supabase_network_ApoyoAdmin`. | Edge runtime **cannot** use `127.0.0.1:8090` inside its container (that is the container itself). `host.docker.internal` works on Docker Desktop but the **compose alias** is the intended production path. |
+
+CompreFace’s UI (`:8000`) stays on localhost for operators only.
+
+### 3.5 Hosting: Docker, nginx, Cloudflare, Resend, Hostinger
+
+**Docker Desktop (WSL2)** is required because Postgres, Kong, CompreFace, and nginx are **Linux containers**. The constraint “runs on a Windows PC” is satisfied by Docker, not by rewriting the stack in C# / IIS.
+
+**nginx Alpine** serves **pre-built** `dist/` for Web (`127.0.0.1:4173`) and Admin (`127.0.0.1:4174`). Why not `vite preview`? Preview is a **Node process tied to a terminal**; it dies when Cursor/PowerShell exits. nginx is a static file server with **gzip**, **Cache-Control** (hashed assets immutable, `index.html` no-store), **security headers**, and `restart: unless-stopped`. Binding **127.0.0.1** means LAN users cannot hit staff UI without the tunnel.
+
+**Cloudflare named tunnel (`cloudflared`)** creates an **outbound** connection from the PC to Cloudflare. Why not port-forward 443 on the router? Many PH ISPs use **CGNAT** (no public IPv4). Opening 443 would also put Kong on the raw internet. The tunnel: (1) no inbound firewall hole, (2) **TLS certificates** at Cloudflare, (3) WAF/DDoS in front, (4) three hostnames → three localhost ports. Face `:8090` is **omitted** from `config.yml` on purpose.
+
+**Cloudflare DNS + Hostinger registrar:** Hostinger only **owns the domain name**. Records for `www` / `admin` / `api` live in Cloudflare so they can point at the **tunnel**, not at a changing home IP.
+
+**Resend (SMTP `smtp.resend.com:465`)** is plugged into **GoTrue**, not into the React apps. Auth must send **confirmation and MPIN recovery** to real inboxes. Local **Inbucket/Mailpit** is only for debugging and is **not** tunneled. The API key stays in `supabase/.env`. From-address `noreply@apoyo-dasma.online` is a domain Resend has permission to send for.
+
+**PowerShell `deploy/scripts`:** Windows-native orchestration (`supabase start`, compose up, health probes). There is no systemd on this PC.
 
 ---
 
@@ -179,6 +208,8 @@ Access: after GoTrue login, a row in `public.admins` is required. Superadmin if 
 ### 6.2 Edge functions (`supabase/functions/`)
 
 Privileged work uses the **service role** inside Deno. Browsers and the phone only send the **anon** key plus the user JWT (except a few pre-auth registration/public endpoints).
+
+**When we use an Edge Function instead of a SQL RPC:** the operation needs HTTP to another container (face verifier), a **stable JSON shape** shared by three clients, multipart-ish payloads, or checks that are awkward in SQL (CMS canonicalize, XLSX assembly). **When we use an RPC:** set-based rules next to the data (`submit_assistance_request`, `claim_admin_session`, snapshot trigger). Both still run **after** RLS/JWT identity exists (except the three public-gateway functions below).
 
 | Function | Purpose |
 |----------|---------|
