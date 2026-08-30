@@ -1,0 +1,43 @@
+# Public SPAs for the Windows homelab. Cloudflare Tunnel keeps talking to
+# 127.0.0.1:4173 (web) and 127.0.0.1:4174 (admin). Do not publish these on LAN.
+#
+# Start order is owned by deploy/scripts/Start-Apoyo.ps1 (Supabase first).
+
+name: apoyo-frontends
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  web:
+    image: apoyo-web:local
+    build:
+      context: ../../ApoyoWeb
+      dockerfile: ../ApoyoAdmin/deploy/docker/spa.Dockerfile
+      additional_contexts:
+        nginx_conf: ./nginx
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "127.0.0.1:4173:80"
+
+  admin:
+    image: apoyo-admin:local
+    build:
+      context: ..
+      dockerfile: deploy/docker/spa.Dockerfile
+      additional_contexts:
+        nginx_conf: ./nginx
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "127.0.0.1:4174:80"

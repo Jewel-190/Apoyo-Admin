@@ -1,0 +1,19 @@
+# Named tunnel used on the Windows homelab PC.
+# Copy to %USERPROFILE%\.cloudflared\config.yml and point credentials-file
+# at the JSON Cloudflare issued for tunnel apoyo-dasma.
+#
+# Do not add the face verifier (:8090) or CompreFace (:8000) here.
+
+tunnel: YOUR-TUNNEL-UUID
+credentials-file: C:\Users\YOUR-USER\.cloudflared\YOUR-TUNNEL-UUID.json
+
+ingress:
+  - hostname: api.apoyo-dasma.online
+    service: http://127.0.0.1:54321
+  - hostname: admin.apoyo-dasma.online
+    service: http://127.0.0.1:4174
+  - hostname: www.apoyo-dasma.online
+    service: http://127.0.0.1:4173
+  - hostname: apoyo-dasma.online
+    service: http://127.0.0.1:4173
+  - service: http_status:404

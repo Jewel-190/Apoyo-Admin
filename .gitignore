@@ -42,6 +42,7 @@ supabase/.env.*
 .env.*
 !.env.example
 !supabase/.env.example
+!deploy/.env.example
 
 # Cursor/VSCode/OS junk
 .cursor/
