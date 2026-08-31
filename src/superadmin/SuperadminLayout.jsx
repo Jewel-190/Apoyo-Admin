@@ -64,11 +64,6 @@ export default function SuperadminLayout() {
   // Single source of truth for desktop sidebar width.
   // Update this value when you change the sidebar width.
   const sidebarWidth = "15rem";
-  // Fixed "On this page" rail used by Service/System settings.
-  const settingsTocWidth = "12rem";
-  const hasSettingsToc = /\/superadmin\/global-settings\/(service|system)\/?$/.test(
-    location.pathname
-  );
 
   const breadcrumb = useMemo(() => {
     if (headerTitle) return headerTitle;
@@ -85,7 +80,6 @@ export default function SuperadminLayout() {
           style={{
             ...themeVars,
             "--superadmin-sidebar-w": sidebarWidth,
-            "--settings-toc-w": hasSettingsToc ? settingsTocWidth : "0rem",
           }}
         >
           <Sidebar
@@ -112,11 +106,7 @@ export default function SuperadminLayout() {
               </div>
             </header>
 
-            <main
-              className={`flex flex-1 flex-col overflow-y-auto p-4 pt-20 sm:p-6 sm:pt-20 lg:p-8 lg:pt-20 ${
-                hasSettingsToc ? "lg:pl-[calc(var(--settings-toc-w)+2rem)]" : ""
-              }`}
-            >
+            <main className="flex flex-1 flex-col overflow-y-auto p-4 pt-20 sm:p-6 sm:pt-20 lg:p-8 lg:pt-20">
               <div className="flex w-full flex-1 flex-col rounded-2xl border border-ocean-200/90 bg-white p-4 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_14px_40px_-24px_rgba(12,72,120,0.35)] sm:p-6 lg:p-8">
                 <Outlet />
               </div>

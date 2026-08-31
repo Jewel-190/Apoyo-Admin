@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, Navigate, useLocation, useParams } from "react-router-dom";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useSuperadminHeaderTitle } from "../../SuperadminLayout";
 import { useScopeSettings } from "../../../shared/context/SettingsContext";
 import {
   LOGO_BANNER_DEFAULTS,
@@ -18,22 +21,145 @@ import {
   tryParseHexColor,
 } from "../../../shared/lib/systemTheme";
 
-const SECTIONS = [
-  { id: "general", title: "General" },
+const SYSTEM_SETTINGS_PATH = "/superadmin/global-settings/system";
+
+const MODULES = [
+  {
+    id: "logo-and-banner",
+    title: "Logo and Banner",
+    emoji: "🖼️",
+  },
+  {
+    id: "theme",
+    title: "Theme",
+    emoji: "🎨",
+  },
 ];
 
-function SectionCard({ id, title, description, children }) {
+function SettingsBackLink({ to, label }) {
   return (
-    <section
-      id={id}
-      className="scroll-mt-24 rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.55)]"
+    <Link
+      to={to}
+      className="inline-flex items-center gap-1 text-sm font-semibold text-ocean-700 hover:text-ocean-900"
     >
-      <div className="border-b border-ocean-100 pb-3">
-        <h2 className="text-lg font-semibold tracking-tight text-ocean-950">{title}</h2>
-        {description ? <p className="mt-1 text-sm text-ocean-700">{description}</p> : null}
+      <ChevronLeft className="h-4 w-4" />
+      {label}
+    </Link>
+  );
+}
+
+function SettingsModulePicker({ modules, basePath }) {
+  return (
+    <div className="grid gap-3">
+      {modules.map((item) => (
+        <Link
+          key={item.id}
+          to={`${basePath}/${item.id}`}
+          className="group flex items-center gap-3 rounded-2xl border border-ocean-200 bg-ocean-50/50 px-4 py-4 text-left shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.55)] transition hover:border-ocean-300 hover:bg-white"
+        >
+          <span
+            className="grid size-12 shrink-0 place-items-center rounded-xl border border-ocean-100 bg-white text-2xl shadow-sm"
+            aria-hidden
+          >
+            {item.emoji}
+          </span>
+          <span className="min-w-0 flex-1 text-base font-semibold tracking-tight text-ocean-950">
+            {item.title}
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-ocean-400 transition group-hover:text-ocean-700" aria-hidden />
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function SkeletonPulse({ className = "" }) {
+  return <div className={`animate-pulse rounded-md bg-ocean-100/80 ${className}`} aria-hidden />;
+}
+
+function SettingsSaveBarSkeleton() {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ocean-100 pt-4">
+      <SkeletonPulse className="h-4 w-28" />
+      <div className="flex gap-2">
+        <SkeletonPulse className="h-9 w-16 rounded-lg" />
+        <SkeletonPulse className="h-9 w-16 rounded-lg" />
       </div>
-      <div className="mt-4 space-y-4">{children}</div>
-    </section>
+    </div>
+  );
+}
+
+function LogoAndBannerSkeleton() {
+  return (
+    <div
+      className="rounded-xl border border-ocean-200 bg-white p-4"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading logo and banner settings"
+    >
+      <SkeletonPulse className="h-4 w-40" />
+      <SkeletonPulse className="mt-2 h-8 max-w-2xl" />
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {LOGO_BANNER_FIELDS.map((field) => (
+          <div key={field.key} className="rounded-xl border border-ocean-100 bg-ocean-50/40 p-3">
+            <SkeletonPulse className="h-3 w-32" />
+            <SkeletonPulse className="mt-2 h-3 w-56 max-w-full" />
+            <div className="mt-3 flex items-center gap-3">
+              <SkeletonPulse className="size-20 shrink-0 rounded-lg" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <SkeletonPulse className="h-9 w-32 rounded-lg" />
+                <SkeletonPulse className="h-3 w-48 max-w-full" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4">
+        <SettingsSaveBarSkeleton />
+      </div>
+    </div>
+  );
+}
+
+function ThemeSettingsSkeleton() {
+  return (
+    <div
+      className="rounded-xl border border-ocean-200 bg-white p-4"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading theme settings"
+    >
+      <SkeletonPulse className="h-4 w-20" />
+      <SkeletonPulse className="mt-2 h-8 max-w-2xl" />
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+        <div className="rounded-xl border border-ocean-100 bg-ocean-50/40 p-3">
+          <SkeletonPulse className="h-3 w-28" />
+          <SkeletonPulse className="mt-2 h-8" />
+          <div className="mt-3 flex items-center gap-3">
+            <SkeletonPulse className="size-12 shrink-0 rounded-lg" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <SkeletonPulse className="h-9" />
+              <SkeletonPulse className="h-3 w-40 max-w-full" />
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-ocean-100 bg-white p-3">
+          <SkeletonPulse className="h-3 w-24" />
+          <SkeletonPulse className="mt-3 h-10 rounded-lg" />
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((index) => (
+              <div key={index} className="min-w-[3.25rem] flex-1">
+                <SkeletonPulse className="h-8" />
+                <SkeletonPulse className="mx-auto mt-1 h-3 w-6" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="mt-4">
+        <SettingsSaveBarSkeleton />
+      </div>
+    </div>
   );
 }
 
@@ -174,6 +300,10 @@ function LogoAndBannerModule() {
     }
   };
 
+  if (loading && !loaded) {
+    return <LogoAndBannerSkeleton />;
+  }
+
   return (
     <div className="rounded-xl border border-ocean-200 bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -184,9 +314,6 @@ function LogoAndBannerModule() {
             fixed in the app. Changes apply live after Save (and on reload via a local cache).
           </p>
         </div>
-        {loading && !loaded ? (
-          <p className="text-[11px] font-semibold text-ocean-700">Loading…</p>
-        ) : null}
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -298,6 +425,10 @@ function SystemThemeModule() {
     }
   };
 
+  if (loading && !loaded) {
+    return <ThemeSettingsSkeleton />;
+  }
+
   return (
     <div className="rounded-xl border border-ocean-200 bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -308,9 +439,6 @@ function SystemThemeModule() {
             and a tight same-hue gradient — nothing is hardcoded in the UI chrome.
           </p>
         </div>
-        {loading && !loaded ? (
-          <p className="text-[11px] font-semibold text-ocean-700">Loading…</p>
-        ) : null}
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
@@ -421,112 +549,60 @@ function SystemThemeModule() {
 }
 
 export function SystemSettings() {
-  const contentRef = useRef(null);
-  const [activeId, setActiveId] = useState(SECTIONS[0].id);
+  const { moduleId } = useParams();
+  const location = useLocation();
+  const module = MODULES.find((item) => item.id === moduleId) || null;
 
-  const sectionIds = useMemo(() => SECTIONS.map((section) => section.id), []);
+  useSuperadminHeaderTitle(module ? `Settings · System · ${module.title}` : "");
 
-  useEffect(() => {
-    const root = contentRef.current;
-    if (!root) return undefined;
-    const nodes = sectionIds
-      .map((id) => root.querySelector(`#${CSS.escape(id)}`))
-      .filter(Boolean);
-    if (!nodes.length) return undefined;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        if (visible[0]?.target?.id) setActiveId(visible[0].target.id);
-      },
-      { root: null, rootMargin: "-20% 0px -55% 0px", threshold: [0.08, 0.2, 0.4] }
+  const hashId = String(location.hash || "").replace(/^#/, "").trim();
+  if (hashId && MODULES.some((item) => item.id === hashId)) {
+    return (
+      <Navigate
+        to={{
+          pathname: `${SYSTEM_SETTINGS_PATH}/${hashId}`,
+          search: location.search,
+          hash: "",
+        }}
+        replace
+      />
     );
-    nodes.forEach((node) => observer.observe(node));
-    return () => observer.disconnect();
-  }, [sectionIds]);
-
-  const handleTocClick = (event, id) => {
-    event.preventDefault();
-    const target = contentRef.current?.querySelector(`#${CSS.escape(id)}`);
-    if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
-    setActiveId(id);
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${window.location.search}#${id}`
+  }
+  if (hashId) {
+    return (
+      <Navigate
+        to={{ pathname: location.pathname, search: location.search, hash: "" }}
+        replace
+      />
     );
-  };
+  }
+  if (moduleId && !module) {
+    return <Navigate to={SYSTEM_SETTINGS_PATH} replace />;
+  }
 
-  const renderTocItems = (keyPrefix) =>
-    SECTIONS.map((section) => {
-      const isActive = activeId === section.id;
-      return (
-        <li key={`${keyPrefix}-${section.id}`}>
-          <a
-            href={`#${section.id}`}
-            onClick={(event) => handleTocClick(event, section.id)}
-            className={`block truncate rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-              isActive
-                ? "bg-ocean-600 text-white shadow-sm"
-                : "text-ocean-700 hover:bg-ocean-50 hover:text-ocean-950"
-            }`}
-          >
-            {section.title}
-          </a>
-        </li>
-      );
-    });
+  if (module) {
+    return (
+      <div className="space-y-5">
+        <SettingsBackLink to={SYSTEM_SETTINGS_PATH} label="Back to System settings" />
+        {module.id === "logo-and-banner" ? <LogoAndBannerModule /> : null}
+        {module.id === "theme" ? <SystemThemeModule /> : null}
+      </div>
+    );
+  }
 
   return (
-    <>
-      <aside
-        className="fixed bottom-0 top-16 z-20 hidden w-[var(--settings-toc-w)] flex-col border-r border-ocean-200 bg-white lg:flex"
-        style={{ left: "var(--superadmin-sidebar-w)" }}
-      >
-        <nav aria-label="On this page" className="flex h-full flex-col overflow-hidden p-3">
-          <p className="shrink-0 px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-ocean-700">
-            On this page
-          </p>
-          <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">{renderTocItems("desk")}</ul>
-        </nav>
-      </aside>
-
-      <div className="space-y-5">
-        <nav
-          aria-label="On this page"
-          className="rounded-2xl border border-ocean-200 bg-white p-2.5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.55)] lg:hidden"
-        >
-          <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-ocean-700">
-            On this page
-          </p>
-          <ul className="space-y-0.5">{renderTocItems("mobile")}</ul>
-        </nav>
-
-        <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">Settings</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ocean-950">
-            System settings
-          </h1>
-          <p className="mt-2 max-w-3xl text-sm text-ocean-700">
-            Platform-wide configuration.
-          </p>
-        </section>
-
-        <div ref={contentRef} className="space-y-4">
-          <SectionCard
-            id="general"
-            title="General"
-            description="Shared platform branding and identity settings."
-          >
-            <LogoAndBannerModule />
-            <SystemThemeModule />
-          </SectionCard>
-        </div>
-      </div>
-    </>
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">Settings</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ocean-950">
+          System settings
+        </h1>
+        <p className="mt-2 max-w-3xl text-sm text-ocean-700">
+          Platform-wide configuration.
+        </p>
+      </section>
+      <SettingsModulePicker modules={MODULES} basePath={SYSTEM_SETTINGS_PATH} />
+    </div>
   );
 }
 

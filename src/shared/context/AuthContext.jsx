@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { setAuthPersistPreference } from "../lib/authStorage";
 import {
   getRoleConfig,
 } from "../config/roleConfig";
@@ -305,7 +306,7 @@ export function AuthProvider({ children }) {
 
   const signIn = useCallback(
     async ({ email, password, rememberMe = false }) => {
-      void rememberMe;
+      setAuthPersistPreference(Boolean(rememberMe));
 
       const normalizedEmail = String(email || "").trim().toLowerCase();
 

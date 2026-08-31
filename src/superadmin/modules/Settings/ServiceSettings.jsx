@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Lock, Plus, Trash2 } from "lucide-react";
+import { Link, Navigate, useLocation, useParams } from "react-router-dom";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Lock, Plus, Trash2 } from "lucide-react";
+import { useSuperadminHeaderTitle } from "../../SuperadminLayout";
 import { InterviewInstructions } from "../../../admin/components/forApprovalDetailUi";
 import { useScopeSettings } from "../../../shared/context/SettingsContext";
 import {
@@ -35,18 +37,28 @@ const LEGAL_PAGE_HINTS = {
   "user-acceptance": "Configure the User Acceptance text that users will see.",
 };
 
-const SECTIONS = [
+const SERVICE_SETTINGS_PATH = "/superadmin/global-settings/service";
+
+const MODULES = [
   {
     id: "interview-scheduling",
     title: "Interview Scheduling",
+    emoji: "📅",
+    description:
+      "Mini CMS for the briefing shown in Admin → For Approval → Scheduling. Steps and office hours are configurable; the Application Number cannot be removed.",
   },
   {
     id: "legal",
     title: "Legal",
+    emoji: "📜",
+    description: "Hardcoded Legal pages. Only section copy is stored; each page is always shown on the website.",
   },
   {
     id: "barangays",
     title: "Barangays",
+    emoji: "🏘️",
+    description:
+      "Official barangay catalog for new selections. Deleting a barangay removes it from this list only. Existing voter and user records keep the barangay name they already have.",
   },
 ];
 
@@ -57,6 +69,127 @@ const TOOL_BTN =
   "inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-xs font-semibold text-slate-700 transition hover:bg-ocean-50 hover:text-ocean-900";
 const INTERVIEW_INPUT_CLS =
   "mt-1.5 w-full rounded-lg border border-ocean-200 bg-white px-3 py-2 text-sm font-medium text-ocean-900 outline-none placeholder:text-ocean-500/70 focus:border-ocean-400";
+
+function SkeletonPulse({ className = "" }) {
+  return <div className={`animate-pulse rounded-md bg-ocean-100/80 ${className}`} aria-hidden />;
+}
+
+function SettingsSaveBarSkeleton() {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ocean-100 pt-4">
+      <SkeletonPulse className="h-4 w-28" />
+      <div className="flex gap-2">
+        <SkeletonPulse className="h-9 w-16 rounded-lg" />
+        <SkeletonPulse className="h-9 w-16 rounded-lg" />
+      </div>
+    </div>
+  );
+}
+
+function InterviewSchedulingSkeleton() {
+  return (
+    <div className="space-y-4" role="status" aria-busy="true" aria-label="Loading interview scheduling">
+      <SkeletonPulse className="h-10 max-w-2xl" />
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SkeletonPulse className="h-16" />
+            <SkeletonPulse className="h-16" />
+          </div>
+          <div className="space-y-2">
+            <SkeletonPulse className="h-3 w-16" />
+            <SkeletonPulse className="h-3 w-64" />
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="rounded-xl border border-ocean-200 bg-ocean-50/40 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <SkeletonPulse className="h-4 w-24" />
+                  <div className="flex gap-1">
+                    <SkeletonPulse className="size-8 rounded-lg" />
+                    <SkeletonPulse className="size-8 rounded-lg" />
+                    <SkeletonPulse className="size-8 rounded-lg" />
+                  </div>
+                </div>
+                <SkeletonPulse className="h-16" />
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <SkeletonPulse className="h-16" />
+            <SkeletonPulse className="h-16" />
+            <SkeletonPulse className="h-16" />
+          </div>
+        </div>
+        <div>
+          <SkeletonPulse className="h-3 w-16" />
+          <SkeletonPulse className="mt-2 h-72 rounded-2xl" />
+        </div>
+      </div>
+      <SettingsSaveBarSkeleton />
+    </div>
+  );
+}
+
+function LegalSettingsSkeleton() {
+  return (
+    <div className="space-y-4" role="status" aria-busy="true" aria-label="Loading legal settings">
+      {LEGAL_PAGES.map((page) => (
+        <div key={page.slug} className="rounded-xl border border-ocean-200 bg-white p-4">
+          <SkeletonPulse className="h-4 w-48" />
+          <SkeletonPulse className="mt-2 h-3 w-72 max-w-full" />
+          <div className="mt-4 space-y-3">
+            <SkeletonPulse className="h-10" />
+            <SkeletonPulse className="h-28" />
+            <SkeletonPulse className="h-10" />
+            <SkeletonPulse className="h-28" />
+          </div>
+        </div>
+      ))}
+      <SettingsSaveBarSkeleton />
+    </div>
+  );
+}
+
+function BarangaySettingsSkeleton() {
+  return (
+    <div
+      className="rounded-xl border border-ocean-200 bg-white p-4"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading barangays"
+    >
+      <SkeletonPulse className="h-4 w-32" />
+      <SkeletonPulse className="mt-2 h-8 max-w-2xl" />
+      <div className="mt-4 flex flex-wrap items-end gap-2">
+        <SkeletonPulse className="h-16 min-w-[12rem] flex-1" />
+        <SkeletonPulse className="h-9 w-16 rounded-lg" />
+      </div>
+      <SkeletonPulse className="mt-4 h-3 w-16" />
+      <SkeletonPulse className="mt-1.5 h-9" />
+      <div className="mt-3 overflow-hidden rounded-xl border border-ocean-100">
+        <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_11rem] gap-2 border-b border-ocean-100 bg-ocean-50/70 px-3 py-2">
+          <SkeletonPulse className="h-3 w-12" />
+          <SkeletonPulse className="ml-auto h-3 w-10" />
+          <SkeletonPulse className="ml-auto h-3 w-14" />
+        </div>
+        <ul className="divide-y divide-ocean-100">
+          {[0, 1, 2, 3, 4, 5].map((index) => (
+            <li
+              key={index}
+              className="grid grid-cols-[minmax(0,1fr)_5.5rem_11rem] items-center gap-2 px-3 py-2"
+            >
+              <SkeletonPulse className="h-4 w-40 max-w-full" />
+              <SkeletonPulse className="ml-auto h-3 w-8" />
+              <div className="flex justify-end gap-1">
+                <SkeletonPulse className="h-8 w-16 rounded-md" />
+                <SkeletonPulse className="h-8 w-16 rounded-md" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
 
 function formatBarangayCount(value) {
   return Number(value || 0).toLocaleString("en-US");
@@ -401,6 +534,10 @@ function LegalSettings() {
     }
   };
 
+  if (loading && !loaded) {
+    return <LegalSettingsSkeleton />;
+  }
+
   return (
     <div className="space-y-4">
       {LEGAL_PAGES.map((page) => (
@@ -412,7 +549,6 @@ function LegalSettings() {
                 {LEGAL_PAGE_HINTS[page.slug] ?? "Configure the copy for this legal page."}
               </p>
             </div>
-            {loading && !loaded ? <p className="text-[11px] font-semibold text-ocean-700">Loading…</p> : null}
           </div>
 
           <div className="mt-4">
@@ -513,6 +649,10 @@ function InterviewSchedulingSettings() {
     }
   };
 
+  if (loading && !loaded) {
+    return <InterviewSchedulingSkeleton />;
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -520,7 +660,6 @@ function InterviewSchedulingSettings() {
           This is the briefing card admins see under For Approval → Scheduling. Steps and office
           hours are editable. The Application Number step is required and cannot be removed.
         </p>
-        {loading && !loaded ? <p className="text-[11px] font-semibold text-ocean-700">Loading…</p> : null}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
@@ -867,6 +1006,10 @@ function BarangaySettings() {
     }
   };
 
+  if (loading && !rows.length && !error) {
+    return <BarangaySettingsSkeleton />;
+  }
+
   return (
     <div className="rounded-xl border border-ocean-200 bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -877,7 +1020,6 @@ function BarangaySettings() {
             list. Voter and user records already saved keep the barangay name they had.
           </p>
         </div>
-        {loading ? <p className="text-[11px] font-semibold text-ocean-700">Loading…</p> : null}
       </div>
 
       <form onSubmit={handleAdd} className="mt-4 flex flex-wrap items-end gap-2">
@@ -927,9 +1069,7 @@ function BarangaySettings() {
           <span className="text-right">Voters</span>
           <span className="text-right">Actions</span>
         </div>
-        {loading && !rows.length ? (
-          <p className="px-3 py-8 text-center text-sm text-ocean-700">Loading barangays…</p>
-        ) : filtered.length === 0 ? (
+        {filtered.length === 0 ? (
           <p className="px-3 py-8 text-center text-sm text-ocean-700">
             {rows.length ? "No barangays match this search." : "No barangays yet. Add the first one above."}
           </p>
@@ -1119,126 +1259,126 @@ function SectionCard({ id, title, description, children }) {
   );
 }
 
-export function ServiceSettings() {
-  const contentRef = useRef(null);
-  const [activeId, setActiveId] = useState(SECTIONS[0].id);
+function SettingsBackLink({ to, label }) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex items-center gap-1 text-sm font-semibold text-ocean-700 hover:text-ocean-900"
+    >
+      <ChevronLeft className="h-4 w-4" />
+      {label}
+    </Link>
+  );
+}
 
-  const sectionIds = useMemo(() => SECTIONS.map((section) => section.id), []);
-
-  useEffect(() => {
-    const root = contentRef.current;
-    if (!root) return undefined;
-    const nodes = sectionIds
-      .map((id) => root.querySelector(`#${CSS.escape(id)}`))
-      .filter(Boolean);
-    if (!nodes.length) return undefined;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        if (visible[0]?.target?.id) setActiveId(visible[0].target.id);
-      },
-      { root: null, rootMargin: "-20% 0px -55% 0px", threshold: [0.08, 0.2, 0.4] }
-    );
-    nodes.forEach((node) => observer.observe(node));
-    return () => observer.disconnect();
-  }, [sectionIds]);
-
-  const handleTocClick = (event, id) => {
-    event.preventDefault();
-    const target = contentRef.current?.querySelector(`#${CSS.escape(id)}`);
-    if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
-    setActiveId(id);
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${window.location.search}#${id}`
-    );
-  };
-
-  const renderTocItems = (keyPrefix) =>
-    SECTIONS.map((section) => {
-      const isActive = activeId === section.id;
-      return (
-        <li key={`${keyPrefix}-${section.id}`}>
-          <a
-            href={`#${section.id}`}
-            onClick={(event) => handleTocClick(event, section.id)}
-            className={`block truncate rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-              isActive
-                ? "bg-ocean-600 text-white shadow-sm"
-                : "text-ocean-700 hover:bg-ocean-50 hover:text-ocean-950"
-            }`}
+function SettingsModulePicker({ modules, basePath }) {
+  return (
+    <div className="grid gap-3">
+      {modules.map((item) => (
+        <Link
+          key={item.id}
+          to={`${basePath}/${item.id}`}
+          className="group flex items-center gap-3 rounded-2xl border border-ocean-200 bg-ocean-50/50 px-4 py-4 text-left shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.55)] transition hover:border-ocean-300 hover:bg-white"
+        >
+          <span
+            className="grid size-12 shrink-0 place-items-center rounded-xl border border-ocean-100 bg-white text-2xl shadow-sm"
+            aria-hidden
           >
-            {section.title}
-          </a>
-        </li>
-      );
-    });
+            {item.emoji}
+          </span>
+          <span className="min-w-0 flex-1 text-base font-semibold tracking-tight text-ocean-950">
+            {item.title}
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-ocean-400 transition group-hover:text-ocean-700" aria-hidden />
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function renderServiceModule(module) {
+  if (module.id === "interview-scheduling") {
+    return (
+      <SectionCard
+        id="interview-scheduling"
+        title="Interview Scheduling"
+        description={module.description}
+      >
+        <InterviewSchedulingSettings />
+      </SectionCard>
+    );
+  }
+  if (module.id === "legal") {
+    return (
+      <SectionCard id="legal" title="Legal" description={module.description}>
+        <LegalSettings />
+      </SectionCard>
+    );
+  }
+  if (module.id === "barangays") {
+    return (
+      <SectionCard id="barangays" title="Barangays" description={module.description}>
+        <BarangaySettings />
+      </SectionCard>
+    );
+  }
+  return null;
+}
+
+export function ServiceSettings() {
+  const { moduleId } = useParams();
+  const location = useLocation();
+  const module = MODULES.find((item) => item.id === moduleId) || null;
+
+  useSuperadminHeaderTitle(module ? `Settings · Service · ${module.title}` : "");
+
+  const hashId = String(location.hash || "").replace(/^#/, "").trim();
+  if (hashId && MODULES.some((item) => item.id === hashId)) {
+    return (
+      <Navigate
+        to={{
+          pathname: `${SERVICE_SETTINGS_PATH}/${hashId}`,
+          search: location.search,
+          hash: "",
+        }}
+        replace
+      />
+    );
+  }
+  if (hashId) {
+    return (
+      <Navigate
+        to={{ pathname: location.pathname, search: location.search, hash: "" }}
+        replace
+      />
+    );
+  }
+  if (moduleId && !module) {
+    return <Navigate to={SERVICE_SETTINGS_PATH} replace />;
+  }
+
+  if (module) {
+    return (
+      <div className="space-y-5">
+        <SettingsBackLink to={SERVICE_SETTINGS_PATH} label="Back to Service settings" />
+        {renderServiceModule(module)}
+      </div>
+    );
+  }
 
   return (
-    <>
-      <aside
-        className="fixed bottom-0 top-16 z-20 hidden w-[var(--settings-toc-w)] flex-col border-r border-ocean-200 bg-white lg:flex"
-        style={{ left: "var(--superadmin-sidebar-w)" }}
-      >
-        <nav aria-label="On this page" className="flex h-full flex-col overflow-hidden p-3">
-          <p className="shrink-0 px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-ocean-700">
-            On this page
-          </p>
-          <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">{renderTocItems("desk")}</ul>
-        </nav>
-      </aside>
-
-      <div className="space-y-5">
-        <nav
-          aria-label="On this page"
-          className="rounded-2xl border border-ocean-200 bg-white p-2.5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.55)] lg:hidden"
-        >
-          <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-ocean-700">
-            On this page
-          </p>
-          <ul className="space-y-0.5">{renderTocItems("mobile")}</ul>
-        </nav>
-
-        <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">Settings</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ocean-950">
-            Service settings
-          </h1>
-          <p className="mt-2 max-w-3xl text-sm text-ocean-700">
-            Controls for interview scheduling, public Legal pages, and the barangay list.
-          </p>
-        </section>
-
-        <div ref={contentRef} className="space-y-4">
-          <SectionCard
-            id="interview-scheduling"
-            title="Interview Scheduling"
-            description="Mini CMS for the briefing shown in Admin → For Approval → Scheduling. Steps and office hours are configurable; the Application Number cannot be removed."
-          >
-            <InterviewSchedulingSettings />
-          </SectionCard>
-          <SectionCard
-            id="legal"
-            title="Legal"
-            description="Hardcoded Legal pages. Only section copy is stored; each page is always shown on the website."
-          >
-            <LegalSettings />
-          </SectionCard>
-          <SectionCard
-            id="barangays"
-            title="Barangays"
-            description="Official barangay catalog for new selections. Deleting a barangay removes it from this list only. Existing voter and user records keep the barangay name they already have."
-          >
-            <BarangaySettings />
-          </SectionCard>
-        </div>
-      </div>
-    </>
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-ocean-200 bg-white p-5 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.7)]">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">Settings</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ocean-950">
+          Service settings
+        </h1>
+        <p className="mt-2 max-w-3xl text-sm text-ocean-700">
+          Controls for interview scheduling, public Legal pages, and the barangay list.
+        </p>
+      </section>
+      <SettingsModulePicker modules={MODULES} basePath={SERVICE_SETTINGS_PATH} />
+    </div>
   );
 }
 

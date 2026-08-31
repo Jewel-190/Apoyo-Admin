@@ -729,6 +729,7 @@ export function Services() {
                 previewCategoryTitle={categoryLabel}
                 previewCategorySlug={selectedAssistance?.slug ?? ""}
                 previewCategoryThemeJson={selectedAssistance?.themeJson ?? null}
+                previewCategoryDescription={selectedAssistance?.description ?? ""}
                 onSubmit={handleSaveService}
                 onClose={closeServiceModal}
                 submitLabel={submitLabel}

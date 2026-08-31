@@ -48,7 +48,9 @@ export default function SuperadminRoutes() {
         <Route path="audit-trail" element={<AuditTrail />} />
         <Route path="global-settings" element={<Navigate to="/superadmin/global-settings/system" replace />} />
         <Route path="global-settings/system" element={<SystemSettings />} />
+        <Route path="global-settings/system/:moduleId" element={<SystemSettings />} />
         <Route path="global-settings/service" element={<ServiceSettings />} />
+        <Route path="global-settings/service/:moduleId" element={<ServiceSettings />} />
         <Route path="global-settings/admin" element={<Navigate to="/superadmin/global-settings/service" replace />} />
         <Route path="global-settings/user" element={<Navigate to="/superadmin/global-settings/system" replace />} />
         <Route

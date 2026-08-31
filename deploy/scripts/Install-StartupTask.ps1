@@ -24,5 +24,5 @@ Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Silent
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
 
 Write-Apoyo "Scheduled task '$taskName' registered (90s after logon, -SkipBuild)."
-Write-Apoyo "In Docker Desktop: Settings → General → Start Docker Desktop when you sign in."
+Write-Apoyo "In Docker Desktop: Settings -> General -> Start Docker Desktop when you sign in."
 Get-ScheduledTask -TaskName $taskName | Format-List TaskName, State

@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Plus, Trash2, X } from "lucide-react";
-import { getHomeCardStripeGradient } from "../../../shared/lib/assistanceCategoryTheme.js";
+import { getHomeCardStripeGradient, parseAssistanceCategoryTheme } from "../../../shared/lib/assistanceCategoryTheme.js";
 import { sanitizeCmsHtml } from "../../../shared/lib/sanitizeHtml";
 
 export const editorFonts = [
@@ -289,10 +289,97 @@ export const stripRichText = (text = "") => {
   return div.textContent || div.innerText || "";
 };
 
-const MOBILE_PRIMARY = "var(--system-primary)";
+/** Matches ApoyoMobile `RequestInfo.tsx` (SF Pro Rounded + hardcoded teal). */
+const MOBILE_PRIMARY = "#0B8F8B";
 const MOBILE_TEXT_DARK = "#2B2B2B";
 const MOBILE_TEXT_MUTED = "#6B7A7A";
 const MOBILE_DANGER = "#E45454";
+const MOBILE_FONT = '"SF Pro Rounded", ui-rounded, system-ui, sans-serif';
+const WEB_INSTRUMENT = { fontFamily: "'Instrument Sans', sans-serif" };
+
+/** Matches ApoyoWeb `ServicesPage.jsx` category chrome when `theme_json` is absent. */
+const WEB_CATEGORY_THEME = {
+  medical: {
+    gradient: "linear-gradient(to right, #008B88 23%, #06C1EC 78%)",
+    accentTint: "rgba(6,193,236,0.08)",
+    accentBorder: "rgba(0,139,136,0.35)",
+    accentText: "#008B88",
+    expanded: "bg-[#e8f8fb] rounded-2xl px-3 -mx-3 shadow-[0_12px_30px_-24px_rgba(0,139,136,0.18)]",
+  },
+  financial: {
+    gradient: "linear-gradient(to right, #008B88 0%, #9ACD32 45%, #FFD700 100%)",
+    accentTint: "rgba(154,205,50,0.12)",
+    accentBorder: "rgba(0,139,136,0.3)",
+    accentText: "#008B88",
+    expanded: "bg-[#fdfbf0] rounded-2xl px-3 -mx-3 shadow-[0_12px_30px_-24px_rgba(200,168,0,0.18)]",
+  },
+  burial: {
+    gradient: "linear-gradient(to right, #008B8B 0%, #4169E1 40%, #7B61FF 70%, #BF40BF 100%)",
+    accentTint: "rgba(123,97,255,0.1)",
+    accentBorder: "rgba(65,105,225,0.35)",
+    accentText: "#7B61FF",
+    expanded: "bg-[#f7f4ff] rounded-2xl px-3 -mx-3 shadow-[0_12px_30px_-24px_rgba(91,81,200,0.18)]",
+  },
+};
+const WEB_DEFAULT_THEME = {
+  gradient: "linear-gradient(to right, var(--system-primary), var(--system-accent, var(--system-primary)))",
+  accentTint: "rgba(var(--system-primary-rgb), 0.1)",
+  accentBorder: "rgba(var(--system-primary-rgb), 0.35)",
+  accentText: "var(--system-primary)",
+  expanded:
+    "bg-ocean-50 rounded-2xl px-3 -mx-3 shadow-[0_12px_30px_-24px_rgba(var(--system-primary-rgb),0.35)]",
+};
+
+function hexToRgba(hex, alpha) {
+  const h = String(hex || "").replace("#", "");
+  if (h.length !== 6) return `rgba(var(--system-primary-rgb),${alpha})`;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function webPreviewTheme(slug, themeJson) {
+  const key = String(slug || "").trim().toLowerCase();
+  const base = WEB_CATEGORY_THEME[key] ?? WEB_DEFAULT_THEME;
+  const parsed = parseAssistanceCategoryTheme(slug, themeJson);
+  const stripe = parsed.homeCardStripeGradient ?? [];
+  const accent = parsed.accent || stripe[0];
+  const hasExplicitStripe = Array.isArray(themeJson?.homeCardStripeGradient)
+    || Array.isArray(themeJson?.home_card_stripe_gradient)
+    || (typeof themeJson === "string" && /homeCardStripeGradient|home_card_stripe_gradient/.test(themeJson));
+
+  if (hasExplicitStripe && stripe.length >= 2) {
+    return {
+      ...base,
+      gradient: `linear-gradient(to right, ${stripe.join(", ")})`,
+      accentText: accent,
+      accentTint: hexToRgba(accent, 0.1),
+      accentBorder: hexToRgba(accent, 0.35),
+    };
+  }
+
+  return base;
+}
+
+/** Same flattening ApoyoWeb `htmlToPlainText` uses before the public Services page renders. */
+function webPlainText(html) {
+  if (!html) return "";
+  return String(html)
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
 
 const FIT_SAMPLE_ZOOM_LEVEL = 100;
 const SAMPLE_ZOOM_LEVELS = [50, 75, 90, 100, 105, 110, 115, 120, 130, 140, 150, 160, 175, 200];
@@ -894,7 +981,7 @@ function WhoBulletsField({ bullets, onChange }) {
 function RequestInfoMobilePreview({
   formData,
   requirements,
-  additionalAttachment,
+  additionalAttachment: _additionalAttachment,
   categoryTitle,
   categorySlug = "",
   categoryThemeJson = null,
@@ -905,6 +992,8 @@ function RequestInfoMobilePreview({
   onSampleExpand,
 }) {
   const [openReq, setOpenReq] = useState({});
+  const [openSampleReq, setOpenSampleReq] = useState({});
+  const [radioPicks, setRadioPicks] = useState({});
 
   const cardStripe = useMemo(
     () => getHomeCardStripeGradient(categorySlug, categoryThemeJson),
@@ -913,17 +1002,18 @@ function RequestInfoMobilePreview({
 
   const topTitle = categoryTitle || formData.assistanceName || "Assistance";
   const serviceTitle = formData.serviceName || "Service Title";
-  const serviceDesc = stripRichText(formData.description || "").trim();
-  const aboutBody = stripRichText(formData.about || "").trim();
+  const descriptionHtml = formData.description || "";
+  const hasDescription = !!stripRichText(descriptionHtml).trim();
+  const aboutHtml = formData.about || "";
+  const hasAbout = !!stripRichText(aboutHtml).trim();
   const whoList = (formData.whoBullets ?? []).map((b) => (b ?? "").trim()).filter(Boolean);
   const radioForm = formData?.radioSelection;
   const radioReminderHtml = (radioForm?.reminderHtml ?? "").trim();
-  const reminderHtml =
-    stripRichText(formData.reminderText || "").trim() || radioReminderHtml;
-  const hasReminder = !!reminderHtml;
+  const reminderHtml = (formData.reminderText || "").trim() || radioReminderHtml;
+  const hasReminder = !!stripRichText(reminderHtml).trim();
 
+  // RequestInfo filters out the fixed additional-attachment slot; it is not on this screen.
   const visibleRequirements = requirements.filter((r) => r.title?.trim());
-  const attachmentTitle = additionalAttachment?.title || DEFAULT_ADDITIONAL_ATTACHMENT.title;
 
   const radioSteps =
     radioForm?.enabled && Array.isArray(radioForm.steps)
@@ -934,19 +1024,29 @@ function RequestInfoMobilePreview({
         )
       : [];
 
+  const canContinue =
+    radioSteps.length === 0 ||
+    radioSteps.every((_, stepIndex) => Boolean(radioPicks[stepIndex]));
+
   const toggleReq = (index) => {
     setOpenReq((prev) => ({ ...prev, [index]: !prev[index] }));
     onSelectRequirement?.(selectedRequirementIndex === index ? null : index);
   };
 
   return (
-    <div className="mx-auto w-full max-w-[390px]">
-      <div className="rounded-[42px] border-[10px] border-[#1b1b1d] bg-[#121316] p-2.5 shadow-2xl">
-        <div
-          className="relative flex flex-col overflow-hidden rounded-[34px] bg-white"
-          style={{ height: "780px", fontFamily: '"SF Pro Rounded", ui-rounded, system-ui, sans-serif' }}
-        >
-          <div className="absolute left-1/2 top-0 z-10 h-5 w-28 -translate-x-1/2 rounded-b-2xl bg-[#111217]" />
+    <div
+      className="absolute inset-y-0 left-1/2 flex max-w-full -translate-x-1/2 flex-col overflow-hidden rounded-[2.4rem] border-[6px] border-[#1c1c1e] bg-[#1c1c1e] shadow-2xl"
+      style={{ aspectRatio: "9 / 19.5" }}
+    >
+      <div
+        className="relative flex min-h-0 min-w-[220px] flex-1 flex-col overflow-hidden rounded-[1.95rem] bg-white"
+        style={{ fontFamily: MOBILE_FONT }}
+      >
+          <div
+            className="pointer-events-none absolute left-1/2 top-[8px] z-20 h-[22px] w-[90px] -translate-x-1/2 rounded-full bg-[#0a0a0a]"
+            aria-hidden
+          />
+          <div className="h-[32px] shrink-0" aria-hidden />
 
           <div
             className="flex h-[52px] shrink-0 items-center border-b px-2.5"
@@ -966,7 +1066,7 @@ function RequestInfoMobilePreview({
             <div className="size-11" />
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 pt-3">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3">
             <div
               className="relative mb-2 flex items-center gap-3 overflow-hidden rounded-xl border p-3"
               style={{ borderColor: "#D8F1F1" }}
@@ -991,45 +1091,49 @@ function RequestInfoMobilePreview({
                 />
               </div>
               <div className="min-w-0 flex-1 pt-0.5">
-                <p className="text-sm font-bold leading-tight" style={{ color: MOBILE_TEXT_DARK }}>
+                <p className="text-[14px] font-bold leading-tight" style={{ color: MOBILE_TEXT_DARK }}>
                   {serviceTitle}
                 </p>
-                {serviceDesc ? (
-                  <p className="mt-0.5 text-[11.5px] leading-snug" style={{ color: MOBILE_TEXT_MUTED }}>
-                    {serviceDesc}
-                  </p>
-                ) : (
-                  <p className="mt-0.5 text-[11.5px] italic leading-snug" style={{ color: MOBILE_TEXT_MUTED }}>
-                    Service description preview.
-                  </p>
-                )}
+                {hasDescription ? (
+                  <RichTextPreview
+                    text={descriptionHtml}
+                    fallback=""
+                    fontFamily={formData.descriptionFontFamily}
+                    className="mt-0.5 text-left text-[14px] leading-5"
+                    style={{ color: MOBILE_TEXT_MUTED }}
+                  />
+                ) : null}
               </div>
             </div>
 
-            {aboutBody ? (
+            {hasAbout ? (
               <>
-                <p className="mt-4 text-[13px] font-bold" style={{ color: MOBILE_TEXT_DARK }}>
+                <p className="mt-4 text-[14px] font-bold" style={{ color: MOBILE_TEXT_DARK }}>
                   About Service
                 </p>
-                <p className="mt-2 text-[11px] leading-4" style={{ color: MOBILE_TEXT_MUTED }}>
-                  {aboutBody}
-                </p>
+                <RichTextPreview
+                  text={aboutHtml}
+                  fallback=""
+                  fontFamily={formData.aboutFontFamily}
+                  className="mt-2 text-[14px] leading-5"
+                  style={{ color: MOBILE_TEXT_MUTED }}
+                />
               </>
             ) : null}
 
             {whoList.length > 0 ? (
               <>
-                <p className="mt-3.5 text-[13px] font-bold" style={{ color: MOBILE_TEXT_DARK }}>
+                <p className="mt-3.5 text-[14px] font-bold" style={{ color: MOBILE_TEXT_DARK }}>
                   Who may Avail
                 </p>
                 {whoList.map((bullet, idx) => (
-                  <div key={`who-preview-${idx}`} className="mt-2 flex items-start gap-2.5">
+                  <div key={`who-preview-${idx}`} className="mt-2 flex items-start">
                     <span
-                      className="mt-1.5 size-1.5 shrink-0 rounded-full"
+                      className="mt-1.5 mr-2.5 size-1.5 shrink-0 rounded-full"
                       style={{ backgroundColor: MOBILE_PRIMARY }}
                       aria-hidden
                     />
-                    <p className="flex-1 text-xs leading-snug" style={{ color: MOBILE_TEXT_DARK }}>
+                    <p className="flex-1 text-[14px] leading-snug" style={{ color: MOBILE_TEXT_DARK }}>
                       {bullet}
                     </p>
                   </div>
@@ -1050,178 +1154,212 @@ function RequestInfoMobilePreview({
                     text={reminderHtml}
                     fallback=""
                     fontFamily={formData.reminderFontFamily}
-                    className="text-center text-[11px] leading-relaxed"
+                    className="text-center text-[14px] leading-5"
                     style={{ color: "#D94B4B" }}
                   />
                 </div>
               </>
             ) : null}
 
-            <div className="mt-3 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-              <div
-                className="overflow-hidden rounded-xl border"
-                style={{ borderColor: "#E7EEEE", backgroundColor: "#FFF" }}
-              >
-                <div className="px-3.5 py-3" style={{ backgroundColor: "#F6FEFE" }}>
-                  <p className="text-[13px] font-extrabold" style={{ color: MOBILE_TEXT_DARK }}>
-                    Requirements
-                  </p>
-                </div>
+            {visibleRequirements.length > 0 ? (
+              <div className="mt-3 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+                <div
+                  className="overflow-hidden rounded-xl border"
+                  style={{ borderColor: "#E7EEEE", backgroundColor: "#FFF" }}
+                >
+                  <div className="px-3.5 py-3" style={{ backgroundColor: "#F6FEFE" }}>
+                    <p className="text-[14px] font-extrabold" style={{ color: MOBILE_TEXT_DARK }}>
+                      Requirements
+                    </p>
+                  </div>
 
-                {visibleRequirements.map((item, index) => {
-                  const tips = (item.tips ?? []).filter((tip) =>
-                    typeof tip === "string" ? tip.trim() : (tip?.title ?? "").trim()
-                  );
-                  const hasDrop = tips.length > 0 || !!item.sampleDocumentImage;
-                  const expanded = !!openReq[index] || selectedRequirementIndex === index;
+                  {visibleRequirements.map((item, index) => {
+                    const tips = (item.tips ?? []).filter((tip) =>
+                      typeof tip === "string" ? tip.trim() : (tip?.title ?? "").trim()
+                    );
+                    const helpText = (item.help ?? "").trim();
+                    const hasSample = !!item.sampleDocumentImage;
+                    const hasDrop = tips.length > 0 || hasSample || !!helpText;
+                    const expanded = !!openReq[index] || selectedRequirementIndex === index;
+                    const sampleOpen = !!openSampleReq[index];
 
-                  return (
-                    <div key={`mobile-req-${index}`}>
-                      <button
-                        type="button"
-                        disabled={!hasDrop}
-                        onClick={() => hasDrop && toggleReq(index)}
-                        className="flex w-full items-center justify-between px-3.5 py-3 text-left disabled:cursor-default"
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                          <MobileCheckIcon />
-                          <span
-                            className="truncate text-[13px] font-semibold"
-                            style={{ color: MOBILE_TEXT_DARK }}
-                          >
-                            {item.title}
-                          </span>
-                        </div>
-                        {hasDrop ? <MobileChevron expanded={expanded} /> : <span className="w-[18px]" />}
-                      </button>
+                    return (
+                      <div key={`mobile-req-${index}`}>
+                        <button
+                          type="button"
+                          disabled={!hasDrop}
+                          onClick={() => hasDrop && toggleReq(index)}
+                          className="flex w-full items-center justify-between px-3.5 py-3 text-left disabled:cursor-default"
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                            <MobileCheckIcon />
+                            <span
+                              className="truncate text-[14px] font-semibold"
+                              style={{ color: MOBILE_TEXT_DARK }}
+                            >
+                              {item.title}
+                            </span>
+                          </div>
+                          {hasDrop ? <MobileChevron expanded={expanded} /> : <span className="w-[18px]" />}
+                        </button>
 
-                      {hasDrop && expanded ? (
-                        <div className="px-3.5 pb-3" style={{ backgroundColor: "#FAFAFA" }}>
-                          {tips.map((tip, tipIndex) => {
-                            const tipTitle = typeof tip === "string" ? tip : tip?.title ?? "";
-                            const tipDescription =
-                              typeof tip === "string" ? "" : tip?.description ?? "";
-                            const tipExpanded = selectedTipIndex === tipIndex;
+                        {hasDrop && expanded ? (
+                          <div className="px-3.5 pb-3" style={{ backgroundColor: "#FAFAFA" }}>
+                            {helpText ? (
+                              <p className="text-[14px] leading-5" style={{ color: MOBILE_TEXT_MUTED }}>
+                                {helpText}
+                              </p>
+                            ) : null}
 
-                            return (
+                            {tips.map((tip, tipIndex) => {
+                              const tipTitle = typeof tip === "string" ? tip : tip?.title ?? "";
+                              const tipDescription =
+                                typeof tip === "string" ? "" : tip?.description ?? "";
+                              const tipExpanded = selectedTipIndex === tipIndex;
+
+                              return (
+                                <div
+                                  key={`mobile-tip-${index}-${tipIndex}`}
+                                  className="mt-2 overflow-hidden rounded-[10px] border bg-white p-2.5"
+                                  style={{ borderColor: "#E4ECEC" }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => onSelectTip?.(tipExpanded ? null : tipIndex)}
+                                    className="flex w-full items-center justify-between gap-2 text-left"
+                                  >
+                                    <span
+                                      className="text-[14px] font-bold"
+                                      style={{ color: MOBILE_TEXT_DARK }}
+                                    >
+                                      {tipTitle}
+                                    </span>
+                                    <MobileChevron expanded={tipExpanded} />
+                                  </button>
+                                  {tipExpanded && tipDescription.trim() ? (
+                                    <p
+                                      className="mt-1.5 text-[14px] leading-5"
+                                      style={{ color: MOBILE_TEXT_MUTED }}
+                                    >
+                                      {tipDescription}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+
+                            {hasSample ? (
                               <div
-                                key={`mobile-tip-${index}-${tipIndex}`}
                                 className="mt-2 overflow-hidden rounded-[10px] border bg-white p-2.5"
                                 style={{ borderColor: "#E4ECEC" }}
                               >
                                 <button
                                   type="button"
-                                  onClick={() => onSelectTip?.(tipExpanded ? null : tipIndex)}
+                                  onClick={() =>
+                                    setOpenSampleReq((prev) => ({ ...prev, [index]: !prev[index] }))
+                                  }
                                   className="flex w-full items-center justify-between gap-2 text-left"
                                 >
-                                  <span
-                                    className="text-xs font-bold"
-                                    style={{ color: MOBILE_TEXT_DARK }}
-                                  >
-                                    {tipTitle}
+                                  <span className="text-[14px] font-bold" style={{ color: MOBILE_TEXT_DARK }}>
+                                    Sample document
                                   </span>
-                                  <MobileChevron expanded={tipExpanded} />
+                                  <MobileChevron expanded={sampleOpen} />
                                 </button>
-                                {tipExpanded && tipDescription.trim() ? (
-                                  <p
-                                    className="mt-1.5 text-[11.5px] leading-relaxed"
-                                    style={{ color: MOBILE_TEXT_MUTED }}
+                                {sampleOpen ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      onSampleExpand?.({
+                                        url: item.sampleDocumentImage,
+                                        fileName: item.sampleDocumentName,
+                                        label: "Sample document",
+                                      })
+                                    }
+                                    className="mt-2 block h-40 w-full overflow-hidden rounded-lg bg-gray-50"
                                   >
-                                    {tipDescription}
-                                  </p>
+                                    <img
+                                      src={item.sampleDocumentImage}
+                                      alt="Sample"
+                                      className="h-full w-full object-contain"
+                                    />
+                                  </button>
                                 ) : null}
                               </div>
-                            );
-                          })}
+                            ) : null}
+                          </div>
+                        ) : null}
 
-                          {item.sampleDocumentImage ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onSampleExpand?.({
-                                  url: item.sampleDocumentImage,
-                                  fileName: item.sampleDocumentName,
-                                  label: item.title,
-                                })
-                              }
-                              className="mt-2 block h-40 w-full overflow-hidden rounded-lg border border-[#E4ECEC] bg-gray-50"
-                            >
-                              <img
-                                src={item.sampleDocumentImage}
-                                alt="Sample"
-                                className="h-full w-full object-contain"
-                              />
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {index < visibleRequirements.length - 1 || attachmentTitle ? (
-                        <div className="ml-3.5 h-px" style={{ backgroundColor: "#EDF4F4" }} />
-                      ) : null}
-                    </div>
-                  );
-                })}
-
-                {attachmentTitle ? (
-                  <div className="flex items-center justify-between px-3.5 py-3">
-                    <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                      <MobileCheckIcon />
-                      <span
-                        className="truncate text-[13px] font-semibold"
-                        style={{ color: MOBILE_TEXT_DARK }}
-                      >
-                        {attachmentTitle}
-                      </span>
-                    </div>
-                    <span className="w-[18px]" />
-                  </div>
-                ) : null}
+                        {index < visibleRequirements.length - 1 ? (
+                          <div className="ml-3.5 h-px" style={{ backgroundColor: "#EDF4F4" }} />
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            ) : null}
 
             {radioSteps.length > 0
               ? radioSteps.map((step, stepIndex) => {
                   const options = (step.options ?? []).filter((opt) =>
                     (opt?.label ?? opt?.value ?? "").trim()
                   );
+                  const picked = radioPicks[stepIndex];
                   return (
                     <div
                       key={`mobile-radio-${stepIndex}`}
-                      className="mt-3 rounded-xl border bg-white p-3.5"
-                      style={{ borderColor: "#E4ECEC" }}
+                      className="mt-4 rounded-xl border bg-white p-3.5"
+                      style={{ borderColor: "#E7EEEE" }}
                     >
-                      <p className="text-[11px] font-semibold" style={{ color: MOBILE_TEXT_MUTED }}>
+                      <p className="mb-1.5 text-[14px]" style={{ color: MOBILE_TEXT_MUTED }}>
                         Step {stepIndex + 1} of {radioSteps.length}
                       </p>
-                      <p className="mt-1 text-[13px] font-bold" style={{ color: MOBILE_TEXT_DARK }}>
+                      <p className="mb-2.5 text-[14px] font-bold" style={{ color: MOBILE_TEXT_DARK }}>
                         {step.prompt}
                       </p>
-                      <div className="mt-2">
-                        {options.map((opt, optionIndex) => (
-                          <div
-                            key={`mobile-radio-opt-${stepIndex}-${optionIndex}`}
-                            className={`flex items-center gap-2.5 py-2.5 ${
-                              optionIndex < options.length - 1 ? "border-b" : ""
-                            }`}
-                            style={{ borderColor: "#EDF4F4" }}
-                          >
-                            <div
-                              className="size-[18px] shrink-0 rounded-full border-2"
-                              style={{ borderColor: "#C5CECE" }}
-                            />
-                            <span className="text-[13px] font-medium" style={{ color: MOBILE_TEXT_DARK }}>
-                              {opt.label ?? opt.value}
-                            </span>
-                          </div>
-                        ))}
+                      <div>
+                        {options.map((opt, optionIndex) => {
+                          const label = opt.label ?? opt.value;
+                          const selected = picked === label;
+                          const last = optionIndex === options.length - 1;
+                          return (
+                            <button
+                              key={`mobile-radio-opt-${stepIndex}-${optionIndex}`}
+                              type="button"
+                              onClick={() =>
+                                setRadioPicks((prev) => ({ ...prev, [stepIndex]: label }))
+                              }
+                              className={`flex w-full items-center gap-3 py-3 text-left ${
+                                last ? "" : "border-b"
+                              }`}
+                              style={{ borderColor: "#F0F4F4" }}
+                            >
+                              <span
+                                className="flex size-5 shrink-0 items-center justify-center rounded-full border-2"
+                                style={{
+                                  borderColor: selected ? MOBILE_PRIMARY : "#C5D5D5",
+                                }}
+                              >
+                                {selected ? (
+                                  <span
+                                    className="size-2.5 rounded-full"
+                                    style={{ backgroundColor: MOBILE_PRIMARY }}
+                                  />
+                                ) : null}
+                              </span>
+                              <span className="text-[14px]" style={{ color: MOBILE_TEXT_DARK }}>
+                                {label}
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   );
                 })
               : null}
 
-            <div className="h-20" aria-hidden />
+            <div className="h-24" aria-hidden />
           </div>
 
           <div
@@ -1230,14 +1368,20 @@ function RequestInfoMobilePreview({
           >
             <div
               className="flex h-[50px] items-center justify-center rounded-[25px]"
-              style={{ backgroundColor: MOBILE_PRIMARY }}
+              style={{
+                backgroundColor: canContinue ? MOBILE_PRIMARY : "#DDEEEE",
+              }}
             >
-              <span className="text-[15px] font-bold text-white">Continue</span>
+              <span
+                className="text-[15px] font-bold"
+                style={{ color: canContinue ? "#FFF" : "#B8CACA" }}
+              >
+                Continue
+              </span>
             </div>
           </div>
         </div>
       </div>
-    </div>
   );
 }
 
@@ -1634,84 +1778,457 @@ export function ArchiveConfirmDialog({
   );
 }
 
-const WebAssistancePreview = ({ formData, mode = "assistance", large = false }) => {
-  const assistanceTitle =
-    mode === "assistance" ? formData.assistanceName || "Financial Assistance" : "Available Service";
-  const serviceTitle = formData.serviceName || "Emergency Financial Relief";
-  const mapLabel = formData.webMapLink?.trim() ? "Visit CSWDO Dasmariñas" : "Add map link";
-  const heroImage = formData.webHeroImage || "";
-  const introText = (formData.webIntroText ?? "").trim();
-  const officeTitle = (formData.webOfficeTitle ?? "").trim();
-  const fallbackOfficeTitle = "City Social Welfare and Development Office - CSWDO";
-
+function WebPreviewAccordionRow({
+  id,
+  title,
+  open,
+  onToggle,
+  accentText,
+  children,
+  meta,
+  level = 1,
+}) {
+  const pad = level === 1 ? "px-3 py-2.5" : level === 2 ? "px-2.5 py-2" : "px-2 py-1.5";
+  const titleSize = level === 1 ? "text-[13px]" : "text-[12.5px]";
   return (
-    <div className={`w-full ${large ? "max-w-5xl" : "max-w-3xl"} rounded-3xl bg-white p-4`}>
-      <div className="grid gap-5 lg:grid-cols-[1fr_1.1fr] lg:items-start">
-        <div className="rounded-3xl bg-white p-4">
-          <div className="flex items-start gap-4">
-            <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <ServiceIconDisplay
-                src={formData.serviceImage}
-                alt=""
-                placeholderIconClassName="size-8"
-              />
-            </div>
-            <h3
-              className="bg-clip-text text-4xl font-extrabold leading-tight text-transparent"
-              style={{ backgroundImage: "var(--system-brand-gradient)" }}
-            >
-              {assistanceTitle}
-            </h3>
-          </div>
-          {introText ? <p className="mt-4 text-sm font-medium leading-relaxed text-slate-600">{introText}</p> : null}
-
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-emerald-50/60 p-4">
-            {formData.webMapLink?.trim() ? (
-              <a
-                href={formData.webMapLink}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-ocean-700 shadow-sm transition hover:bg-slate-50"
-              >
-                {mapLabel}
-                <span className="text-slate-400">↗</span>
-              </a>
-            ) : (
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600">
-                {mapLabel}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-8">
-            <p className="text-base font-semibold text-slate-900">Services</p>
-            <div className="mt-4 space-y-1">
-              {[serviceTitle].map((name) => (
-                <div
-                  key={name}
-                  className="flex items-center justify-between rounded-2xl px-2 py-3 text-sm font-medium text-slate-700"
-                >
-                  <span className="truncate">{name}</span>
-                  <span className="text-slate-400">↗</span>
-                </div>
-              ))}
-            </div>
+    <div
+      className={`overflow-hidden rounded-xl border ${
+        level === 1 ? "border-gray-100 bg-white/95 shadow-sm" : "border-gray-100/90 bg-white"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={id}
+        className={`flex w-full items-center justify-between gap-3 text-left transition hover:bg-gray-50/80 ${pad}`}
+      >
+        <span className="min-w-0 flex-1">
+          <span
+            className={`block font-semibold text-gray-900 ${titleSize}`}
+            style={{ ...WEB_INSTRUMENT, fontWeight: 600 }}
+          >
+            {title}
+          </span>
+          {meta && !open ? (
+            <span className="mt-0.5 block truncate text-[11px] text-gray-500" style={WEB_INSTRUMENT}>
+              {meta}
+            </span>
+          ) : null}
+        </span>
+        <span
+          className="inline-block shrink-0 text-base font-bold leading-none transition-transform duration-300"
+          style={{
+            color: open ? accentText : undefined,
+            transform: open ? "rotate(90deg)" : "rotate(0deg)",
+          }}
+          aria-hidden
+        >
+          ↗
+        </span>
+      </button>
+      <div
+        id={id}
+        style={{
+          display: "grid",
+          gridTemplateRows: open ? "1fr" : "0fr",
+          transition: "grid-template-rows 0.35s ease",
+        }}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className={`border-t border-gray-100 ${level === 1 ? "px-3 py-3" : "px-2.5 py-2.5"}`}>
+            {children}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
 
-        <div className="relative overflow-hidden rounded-3xl bg-slate-100 shadow-[0_18px_42px_-28px_rgba(15,23,42,0.35)]">
-          {heroImage ? (
-            <img
-              src={heroImage}
-              alt="CSWDO preview"
-              className={`${large ? "h-[520px]" : "h-[360px]"} w-full object-cover`}
-            />
-          ) : (
-            <div className={`${large ? "h-[520px]" : "h-[360px]"} w-full bg-gradient-to-br from-slate-200 to-slate-100`} />
-          )}
+function WebProgramDetailPreview({ service, accentText }) {
+  const [openSection, setOpenSection] = useState(null);
+  const [openRequirements, setOpenRequirements] = useState(() => new Set());
+  const [openTips, setOpenTips] = useState(() => new Set());
+  const [openSamples, setOpenSamples] = useState(() => new Set());
+  const serviceKey = "cms-web-preview";
 
-          <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/55 via-black/15 to-transparent p-4">
-            <p className="text-lg font-semibold text-white drop-shadow">{officeTitle || fallbackOfficeTitle}</p>
+  const toggleSection = (section) => {
+    setOpenSection((prev) => (prev === section ? null : section));
+  };
+
+  const toggleRequirement = (reqId) => {
+    setOpenRequirements((prev) => {
+      const next = new Set(prev);
+      if (next.has(reqId)) next.delete(reqId);
+      else next.add(reqId);
+      return next;
+    });
+  };
+
+  const toggleTip = (tipId) => {
+    setOpenTips((prev) => {
+      const next = new Set(prev);
+      if (next.has(tipId)) next.delete(tipId);
+      else next.add(tipId);
+      return next;
+    });
+  };
+
+  const toggleSample = (reqId) => {
+    setOpenSamples((prev) => {
+      const next = new Set(prev);
+      if (next.has(reqId)) next.delete(reqId);
+      else next.add(reqId);
+      return next;
+    });
+  };
+
+  const reqCount = service.requirements?.length ?? 0;
+
+  return (
+    <div className="space-y-2.5 pb-5 pl-0.5">
+      {service.description ? (
+        <p className="text-[13px] leading-relaxed text-gray-600" style={WEB_INSTRUMENT}>
+          {service.description}
+        </p>
+      ) : null}
+
+      <div className="space-y-2">
+        {service.about ? (
+          <WebPreviewAccordionRow
+            id={`${serviceKey}-about`}
+            title="About this program"
+            open={openSection === "about"}
+            onToggle={() => toggleSection("about")}
+            accentText={accentText}
+            meta="Overview"
+          >
+            <p className="text-[13px] leading-relaxed text-gray-700" style={WEB_INSTRUMENT}>
+              {service.about}
+            </p>
+          </WebPreviewAccordionRow>
+        ) : null}
+
+        {service.whoBullets?.length ? (
+          <WebPreviewAccordionRow
+            id={`${serviceKey}-who`}
+            title="Who it serves"
+            open={openSection === "who"}
+            onToggle={() => toggleSection("who")}
+            accentText={accentText}
+            meta={`${service.whoBullets.length} detail${service.whoBullets.length === 1 ? "" : "s"}`}
+          >
+            <ul className="space-y-2">
+              {service.whoBullets.map((item, whoIndex) => (
+                <li
+                  key={whoIndex}
+                  className="flex gap-2 text-[13px] leading-relaxed text-gray-700"
+                  style={WEB_INSTRUMENT}
+                >
+                  <span
+                    className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: accentText }}
+                    aria-hidden
+                  />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </WebPreviewAccordionRow>
+        ) : null}
+
+        {service.reminder ? (
+          <WebPreviewAccordionRow
+            id={`${serviceKey}-reminder`}
+            title="Reminder"
+            open={openSection === "reminder"}
+            onToggle={() => toggleSection("reminder")}
+            accentText={accentText}
+            meta="Important note"
+          >
+            <div className="rounded-lg border border-rose-100 bg-rose-50/80 px-3 py-2.5">
+              <p className="text-[13px] leading-relaxed text-rose-800/90" style={WEB_INSTRUMENT}>
+                {service.reminder}
+              </p>
+            </div>
+          </WebPreviewAccordionRow>
+        ) : null}
+
+        {reqCount > 0 ? (
+          <WebPreviewAccordionRow
+            id={`${serviceKey}-requirements`}
+            title="Requirements"
+            open={openSection === "requirements"}
+            onToggle={() => toggleSection("requirements")}
+            accentText={accentText}
+            meta={`${reqCount} document${reqCount === 1 ? "" : "s"}`}
+          >
+            <div className="space-y-2">
+              {service.requirements.map((req, reqIndex) => {
+                const reqId = `req-${reqIndex}`;
+                const reqOpen = openRequirements.has(reqId);
+                const tipCount = req.tips?.length ?? 0;
+                const hasNested = Boolean(req.help) || tipCount > 0 || Boolean(req.sampleDocumentImage);
+                const title = req.title || `Requirement ${reqIndex + 1}`;
+
+                if (!hasNested) {
+                  return (
+                    <div
+                      key={reqId}
+                      className="rounded-xl border border-gray-100 bg-gray-50/80 px-2.5 py-2 text-[12.5px] font-semibold text-gray-800"
+                      style={{ ...WEB_INSTRUMENT, fontWeight: 600 }}
+                    >
+                      {title}
+                    </div>
+                  );
+                }
+
+                return (
+                  <WebPreviewAccordionRow
+                    key={reqId}
+                    id={`${serviceKey}-${reqId}`}
+                    title={title}
+                    open={reqOpen}
+                    onToggle={() => toggleRequirement(reqId)}
+                    accentText={accentText}
+                    level={2}
+                    meta={
+                      [
+                        tipCount ? `${tipCount} tip${tipCount === 1 ? "" : "s"}` : null,
+                        req.sampleDocumentImage ? "sample" : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "Details"
+                    }
+                  >
+                    <div className="space-y-2">
+                      {req.help ? (
+                        <p className="text-[12.5px] leading-relaxed text-gray-600" style={WEB_INSTRUMENT}>
+                          {req.help}
+                        </p>
+                      ) : null}
+
+                      {tipCount > 0 ? (
+                        <div className="space-y-1.5">
+                          <p
+                            className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400"
+                            style={WEB_INSTRUMENT}
+                          >
+                            Tips
+                          </p>
+                          {req.tips.map((tip, tipIndex) => {
+                            const tipId = `${reqId}-tip-${tipIndex}`;
+                            const tipTitle = tip.title || `Tip ${tipIndex + 1}`;
+                            if (!tip.description) {
+                              return (
+                                <div
+                                  key={tipId}
+                                  className="rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-2 text-[12px] font-semibold text-gray-800"
+                                  style={{ ...WEB_INSTRUMENT, fontWeight: 600 }}
+                                >
+                                  {tipTitle}
+                                </div>
+                              );
+                            }
+                            return (
+                              <WebPreviewAccordionRow
+                                key={tipId}
+                                id={`${serviceKey}-${tipId}`}
+                                title={tipTitle}
+                                open={openTips.has(tipId)}
+                                onToggle={() => toggleTip(tipId)}
+                                accentText={accentText}
+                                level={3}
+                                meta="Tap for details"
+                              >
+                                <p className="text-[12px] leading-relaxed text-gray-600" style={WEB_INSTRUMENT}>
+                                  {tip.description}
+                                </p>
+                              </WebPreviewAccordionRow>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+
+                      {req.sampleDocumentImage ? (
+                        <WebPreviewAccordionRow
+                          id={`${serviceKey}-${reqId}-sample`}
+                          title="Sample document"
+                          open={openSamples.has(reqId)}
+                          onToggle={() => toggleSample(reqId)}
+                          accentText={accentText}
+                          level={3}
+                          meta={req.sampleDocumentName || "Preview"}
+                        >
+                          <div className="overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                            <img
+                              src={req.sampleDocumentImage}
+                              alt={req.sampleDocumentName || `Sample for ${title}`}
+                              className="mx-auto max-h-48 w-full object-contain p-2"
+                            />
+                            {req.sampleDocumentName ? (
+                              <p className="border-t border-gray-100 px-2 py-1 text-center text-[10px] text-gray-500">
+                                {req.sampleDocumentName}
+                              </p>
+                            ) : null}
+                          </div>
+                        </WebPreviewAccordionRow>
+                      ) : null}
+                    </div>
+                  </WebPreviewAccordionRow>
+                );
+              })}
+            </div>
+          </WebPreviewAccordionRow>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+const WebAssistancePreview = ({
+  formData,
+  mode = "assistance",
+  large = false,
+  requirements = [],
+  additionalAttachment = null,
+  categoryTitle = "",
+  categorySlug = "",
+  categoryThemeJson = null,
+  categoryDescription = "",
+}) => {
+  const theme = useMemo(
+    () => webPreviewTheme(categorySlug, categoryThemeJson),
+    [categorySlug, categoryThemeJson]
+  );
+  const pageTitle =
+    categoryTitle ||
+    (mode === "assistance" ? formData.assistanceName : "") ||
+    "Assistance";
+  const serviceTitle = formData.serviceName || "Service title";
+  const description = webPlainText(formData.description || "");
+  const about = webPlainText(formData.about || "");
+  const reminder = webPlainText(formData.reminderText || "").trim();
+  const whoBullets = (formData.whoBullets ?? []).map((b) => (b ?? "").trim()).filter(Boolean);
+  const categoryDesc = webPlainText(categoryDescription || "");
+
+  const previewRequirements = [
+    ...(requirements ?? [])
+      .filter((req) => (req?.title ?? "").trim())
+      .map((req) => ({
+        title: req.title.trim(),
+        help: (req.help ?? "").trim(),
+        sampleDocumentImage: req.sampleDocumentImage || "",
+        sampleDocumentName: req.sampleDocumentName || "",
+        tips: (req.tips ?? [])
+          .map((tip) =>
+            typeof tip === "string"
+              ? { title: tip.trim(), description: "" }
+              : {
+                  title: (tip?.title ?? "").trim(),
+                  description: (tip?.description ?? "").trim(),
+                }
+          )
+          .filter((tip) => tip.title || tip.description),
+      })),
+    additionalAttachment?.title
+      ? {
+          title: additionalAttachment.title,
+          help: "",
+          sampleDocumentImage: "",
+          sampleDocumentName: "",
+          tips: [],
+        }
+      : null,
+  ].filter(Boolean);
+
+  const service = {
+    label: serviceTitle,
+    description,
+    about,
+    reminder,
+    whoBullets,
+    requirements: previewRequirements,
+  };
+
+  const hasDetail =
+    service.requirements.length > 0 ||
+    Boolean(service.description) ||
+    Boolean(service.about) ||
+    Boolean(service.reminder) ||
+    (service.whoBullets?.length ?? 0) > 0;
+
+  return (
+    <div
+      className={`w-full bg-gradient-to-r from-[#faf8f5] via-white to-[#f3f7f6] ${
+        large ? "px-6 pb-16 pt-6" : "px-4 pb-10 pt-4"
+      }`}
+    >
+      <div className={large ? "mx-auto max-w-[1100px]" : "mx-auto max-w-full"}>
+        <div
+          className="mb-5 inline-flex items-center gap-2 rounded-full border bg-white px-4 py-2 text-sm shadow-sm"
+          style={{ ...WEB_INSTRUMENT, fontWeight: 500, borderColor: "rgba(var(--system-primary-rgb),0.2)", color: theme.accentText }}
+        >
+          ← Back to Services
+        </div>
+
+        <div className="rounded-[2rem] border border-white/70 bg-white/70 p-4 shadow-[0_28px_70px_-45px_rgba(15,23,42,0.2)] backdrop-blur-sm sm:p-5">
+          <h2
+            className={`${large ? "text-4xl md:text-5xl" : "text-3xl"} mb-5 leading-tight`}
+            style={{
+              ...WEB_INSTRUMENT,
+              fontWeight: 600,
+              background: theme.gradient,
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+            }}
+          >
+            {pageTitle}
+          </h2>
+
+          {categoryDesc ? (
+            <p
+              className="mb-6 text-[15px] leading-relaxed text-gray-700"
+              style={{ ...WEB_INSTRUMENT, fontWeight: 400 }}
+            >
+              {categoryDesc}
+            </p>
+          ) : null}
+
+          <div
+            className="mb-7 rounded-2xl border p-4"
+            style={{ borderColor: theme.accentBorder, background: theme.accentTint }}
+          >
+            <p className="text-xs text-gray-500" style={WEB_INSTRUMENT}>
+              Location and visit details will appear here once published in Web CMS.
+            </p>
+          </div>
+
+          <h3 className="mb-4 text-xl text-gray-900" style={{ ...WEB_INSTRUMENT, fontWeight: 600 }}>
+            Services
+          </h3>
+          <div className="flex flex-col gap-1">
+            <div className={`border-b border-gray-100 ${hasDetail ? theme.expanded : ""}`}>
+              <div className="flex w-full items-center justify-between py-3 text-left">
+                <span
+                  className="text-[15px] text-gray-900"
+                  style={{ ...WEB_INSTRUMENT, fontWeight: 600 }}
+                >
+                  {service.label}
+                </span>
+                <span
+                  className="inline-block text-lg font-bold"
+                  style={{ color: theme.accentText, transform: "rotate(90deg)" }}
+                  aria-hidden
+                >
+                  ↗
+                </span>
+              </div>
+              {hasDetail ? (
+                <WebProgramDetailPreview service={service} accentText={theme.accentText} />
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
@@ -1727,7 +2244,7 @@ export const LARGE_MODAL_OVERLAY_CLASS =
 export const SERVICE_MODAL_MAX_WIDTH_CLASS = "max-w-7xl";
 
 export const LARGE_MODAL_PANEL_CLASS =
-  `flex max-h-[min(92vh,880px)] w-full ${SERVICE_MODAL_MAX_WIDTH_CLASS} flex-col overflow-hidden rounded-2xl border border-ocean-200 bg-white shadow-[0_24px_60px_-24px_rgba(var(--system-primary-rgb),0.85)]`;
+  `flex max-h-[min(94vh,920px)] w-full ${SERVICE_MODAL_MAX_WIDTH_CLASS} flex-col overflow-hidden rounded-2xl border border-ocean-200 bg-white shadow-[0_24px_60px_-24px_rgba(var(--system-primary-rgb),0.85)]`;
 
 export function AddAssistanceForm({
   mode = "assistance",
@@ -1760,6 +2277,7 @@ export function AddAssistanceForm({
   previewCategoryTitle = "",
   previewCategorySlug = "",
   previewCategoryThemeJson = null,
+  previewCategoryDescription = "",
 }) {
   const isModalLayout = layout === "modal";
   const confirmVariant =
@@ -1773,6 +2291,7 @@ export function AddAssistanceForm({
   const additionalAttachment = formData?.additionalAttachment ?? DEFAULT_ADDITIONAL_ATTACHMENT;
 
   const [previewMode, setPreviewMode] = useState("mobile");
+  const [narrowPane, setNarrowPane] = useState("cms");
   const [webPreviewOpen, setWebPreviewOpen] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [sampleLightbox, setSampleLightbox] = useState(null);
@@ -1816,9 +2335,8 @@ export function AddAssistanceForm({
     onSubmit?.();
   };
 
-  const formGrid = (
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(400px,0.95fr)] lg:items-start">
-        <div className="space-y-3">
+  const formFields = (
+        <div className="space-y-3 pr-2">
           <div className="grid gap-3 lg:grid-cols-[1fr_170px]">
             {mode === "assistance" ? (
               <label className="space-y-1.5 text-sm font-semibold text-ocean-900">
@@ -2192,9 +2710,24 @@ export function AddAssistanceForm({
             onChange={(next) => onChange("radioSelection", next)}
           />
         </div>
+  );
 
-        <div className="rounded-xl border border-ocean-200 bg-ocean-50/70 p-3">
-          <div className="mb-3 flex items-center justify-between gap-3">
+  const webPreviewNode = (
+    <WebAssistancePreview
+      formData={formData}
+      mode={mode}
+      requirements={requirements}
+      additionalAttachment={additionalAttachment}
+      categoryTitle={previewCategoryTitle || formData.assistanceName}
+      categorySlug={previewCategorySlug}
+      categoryThemeJson={previewCategoryThemeJson}
+      categoryDescription={previewCategoryDescription}
+    />
+  );
+
+  const previewPane = (
+        <div className="flex h-full min-h-0 flex-col rounded-xl border border-ocean-200 bg-ocean-50/70 p-3">
+          <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
             <div className="inline-flex rounded-xl border border-ocean-200 bg-white p-1 shadow-sm">
               {[
                 ["mobile", "Mobile"],
@@ -2215,13 +2748,23 @@ export function AddAssistanceForm({
                 );
               })}
             </div>
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">
-              {previewMode === "mobile" ? "Sample Mobile Preview" : "Sample Web Preview"}
-            </span>
+            {previewMode === "web" ? (
+              <button
+                type="button"
+                onClick={() => setWebPreviewOpen(true)}
+                className="inline-flex h-9 items-center rounded-lg bg-ocean-600 px-3 text-xs font-semibold text-white transition hover:bg-ocean-700"
+              >
+                Enlarge
+              </button>
+            ) : (
+              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-ocean-700">
+                Request info
+              </span>
+            )}
           </div>
 
           {previewMode === "mobile" ? (
-            <div className="mt-2 flex justify-center">
+            <div className="relative min-h-[520px] flex-1 overflow-hidden lg:min-h-0">
               <RequestInfoMobilePreview
                 formData={formData}
                 requirements={requirements}
@@ -2237,24 +2780,18 @@ export function AddAssistanceForm({
               />
             </div>
           ) : (
-            <div className="rounded-2xl border border-ocean-200 bg-white p-3">
-              <div className="flex items-center justify-between gap-3 px-1 pb-2">
-                <div>
-                  <p className="text-sm font-semibold text-ocean-900">Web preview</p>
-                  <p className="mt-0.5 text-xs text-ocean-700">
-                    Full layout is available in <span className="font-semibold">Open web preview</span>.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setWebPreviewOpen(true)}
-                  className="inline-flex h-9 items-center rounded-lg bg-ocean-600 px-3 text-xs font-semibold text-white transition hover:bg-ocean-700"
-                >
-                  Open web preview
-                </button>
-              </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-2xl border border-ocean-200 bg-white">
+              {webPreviewNode}
             </div>
           )}
+        </div>
+  );
+
+  const formGrid = (
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(400px,0.95fr)] lg:items-start">
+        {formFields}
+        <div className="min-h-[560px] lg:sticky lg:top-3 lg:self-start lg:h-[min(78vh,760px)]">
+          {previewPane}
         </div>
       </div>
   );
@@ -2339,7 +2876,17 @@ export function AddAssistanceForm({
               </button>
             </div>
             <div className="mt-4">
-              <WebAssistancePreview formData={formData} mode={mode} large />
+              <WebAssistancePreview
+                formData={formData}
+                mode={mode}
+                large
+                requirements={requirements}
+                additionalAttachment={additionalAttachment}
+                categoryTitle={previewCategoryTitle || formData.assistanceName}
+                categorySlug={previewCategorySlug}
+                categoryThemeJson={previewCategoryThemeJson}
+                categoryDescription={previewCategoryDescription}
+              />
             </div>
           </div>
         </div>
@@ -2373,9 +2920,32 @@ export function AddAssistanceForm({
   );
 
   if (isModalLayout) {
+    const loadingDim = isLoadingDetail ? "pointer-events-none select-none opacity-50" : undefined;
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain pt-3 pb-3">
+        <div className="flex shrink-0 items-center border-b border-ocean-100 py-2 lg:hidden">
+          <div className="inline-flex rounded-xl border border-ocean-200 bg-white p-1 shadow-sm">
+            {[
+              ["cms", "CMS"],
+              ["preview", "Preview"],
+            ].map(([id, label]) => {
+              const active = narrowPane === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setNarrowPane(id)}
+                  className={`inline-flex h-9 items-center rounded-lg px-4 text-sm font-semibold transition ${
+                    active ? "bg-ocean-600 text-white" : "text-ocean-700 hover:bg-ocean-50"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
           {isLoadingDetail ? (
             <div
               className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center bg-white/80 pt-14 backdrop-blur-[1px]"
@@ -2394,9 +2964,20 @@ export function AddAssistanceForm({
               </div>
             </div>
           ) : null}
-          <div className={isLoadingDetail ? "pointer-events-none select-none opacity-50" : undefined}>
-            {formGrid}
+          <div
+            className={`cms-modal-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain border-ocean-100 pt-3 pb-3 lg:block lg:border-r ${
+              narrowPane === "preview" ? "hidden" : ""
+            } ${loadingDim ?? ""}`}
+          >
+            {formFields}
           </div>
+          <aside
+            className={`min-h-0 w-full flex-col overflow-hidden pt-3 pb-3 lg:flex lg:h-auto lg:min-h-0 lg:w-[min(46%,480px)] lg:flex-none lg:pl-3 ${
+              narrowPane === "cms" ? "hidden" : "flex h-full min-h-0 flex-1"
+            } ${loadingDim ?? ""}`}
+          >
+            {previewPane}
+          </aside>
         </div>
         <div className="shrink-0 border-t border-ocean-100 pt-2">{footerBlock}</div>
         {overlayDialogs}

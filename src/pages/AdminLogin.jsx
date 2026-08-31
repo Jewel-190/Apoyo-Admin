@@ -7,6 +7,7 @@ import { LOGIN_HERO_URL } from "../shared/lib/staticAssets";
 import { BrandChrome } from "../shared/components/BrandChrome";
 import { SystemThemeScope } from "../shared/components/SystemThemeScope";
 import { useAuth } from "../shared/context/AuthContext";
+import { getAuthPersistPreference } from "../shared/lib/authStorage";
 
 // Client-side brute-force throttle. After MAX_FAILED_ATTEMPTS consecutive
 // failures the form locks for LOCKOUT_DURATION_MS. Persisted in localStorage so
@@ -49,7 +50,7 @@ function writeNumber(key, value) {
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(() => getAuthPersistPreference());
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [lockUntil, setLockUntil] = useState(() => readNumber(LOCK_UNTIL_KEY));
@@ -212,7 +213,7 @@ export default function AdminLogin() {
               />
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center">
               <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
                 <input
                   type="checkbox"
@@ -223,9 +224,6 @@ export default function AdminLogin() {
                 />
                 Remember me
               </label>
-              <a href="#" className="text-sm font-medium" style={brandGradientText}>
-                Forgot Password
-              </a>
             </div>
 
             <button

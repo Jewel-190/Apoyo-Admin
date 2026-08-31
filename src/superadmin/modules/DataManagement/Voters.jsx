@@ -1342,7 +1342,7 @@ export function Voters() {
                   <p className="py-8 text-center text-sm text-ocean-700">
                     No barangays found. Add them in{" "}
                     <Link
-                      to="/superadmin/global-settings/service#barangays"
+                      to="/superadmin/global-settings/service/barangays"
                       className="font-semibold text-ocean-800 underline underline-offset-2"
                     >
                       Service settings → Barangays
