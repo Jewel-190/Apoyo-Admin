@@ -6,6 +6,8 @@ export const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-request-code-secret, x-cleanup-secret",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "X-Content-Type-Options": "nosniff",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 };
 
 export const jsonHeaders = {
